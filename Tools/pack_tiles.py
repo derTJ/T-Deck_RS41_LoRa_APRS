@@ -45,10 +45,10 @@ vor (sollte bei diesen Downloads nicht passieren), wird die haeufigere
 Endung gepackt und die andere übersprungen (mit Warnung).
 
 Aufruf (ein Lauf pro Kartenart, mehrere Ordner gehen auch in einem Aufruf):
-  python3 pack_tiles.py /Volumes/T-DECK/tiles --verify
-  python3 pack_tiles.py /Volumes/T-DECK/tiles_sat /Volumes/T-DECK/tiles_topo \
-      /Volumes/T-DECK/tiles_relief /Volumes/T-DECK/tiles_topplus \
-      --min-size 2048 --verify
+python3 Tools/pack_tiles.py ~/kartenkacheln/tiles --verify
+python3 Tools/pack_tiles.py ~/kartenkacheln/tiles_sat ~/kartenkacheln/tiles_topo \
+    ~/kartenkacheln/tiles_relief ~/kartenkacheln/tiles_topplus \
+    --min-size 2048 --verify
 
 Nach erfolgreichem Packen (und --verify, falls genutzt) koennen die
 urspruenglichen z/x/y-Ordner geloescht werden, entweder von Hand oder mit
