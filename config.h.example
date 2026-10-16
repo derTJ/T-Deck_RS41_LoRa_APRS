@@ -1,0 +1,19 @@
+// config.h.example -- Vorlage fuer die persoenlichen Einstellungen
+//
+// So geht's:
+//   1. Diese Datei kopieren und in "config.h" umbenennen (gleicher Ordner).
+//   2. In der Kopie (config.h) unten das eigene Rufzeichen und die eigenen
+//      Heimat-Koordinaten eintragen.
+//   3. config.h NICHT hochladen -- sie steht absichtlich in .gitignore und
+//      bleibt nur lokal auf deinem Rechner. Diese Beispieldatei (config.h.example)
+//      darf dagegen auf GitHub bleiben, sie enthaelt keine persoenlichen Daten.
+
+#ifndef TDECK_CONFIG_H
+#define TDECK_CONFIG_H
+
+#define FW_CALLSIGN    "NOCALL"         // <-- HIER: eigenes Rufzeichen eintragen (z. B. "DO1ABC")
+
+const double HOME_LAT = 0.0;            // <-- HIER: eigene Heimat-Koordinaten eintragen (Breitengrad)
+const double HOME_LON = 0.0;            // <-- HIER: eigene Heimat-Koordinaten eintragen (Laengengrad)
+
+#endif
