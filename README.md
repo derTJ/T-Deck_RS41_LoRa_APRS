@@ -78,6 +78,39 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
 
 Vollständige Tastenbelegung und Menüpunkte: Kopfkommentar in `tdeck_rs41_v2.ino`.
 
+## Screenshots
+
+### Sondenmodus
+
+<img src="Bilder/Sondenmodus/shot_20261016_151218_karte.jpg" width="32%"> <img src="Bilder/Sondenmodus/shot_20261015_130831_karte.jpg" width="32%"> <img src="Bilder/Sondenmodus/shot_20261016_151223_hoehentrack.jpg" width="32%">
+
+Kartenansicht mit Flugbahn und Landevorhersage (links/Mitte) und Höhentrack-Diagramm des Aufstiegs (rechts).
+
+<details>
+<summary>Weitere Sondenmodus-Screenshots</summary>
+
+<img src="Bilder/Sondenmodus/shot_20261015_133858_karte.jpg" width="32%"> <img src="Bilder/Sondenmodus/shot_20261016_135007_karte.jpg" width="32%"> <img src="Bilder/Sondenmodus/shot_20261016_140233_karte.jpg" width="32%">
+<img src="Bilder/Sondenmodus/shot_20261016_141241_karte.jpg" width="32%"> <img src="Bilder/Sondenmodus/shot_20261016_145113_karte.jpg" width="32%">
+
+</details>
+
+### LoRa-APRS-Modus
+
+<img src="Bilder/LoRa%20Modus/shot_20261016_201429_karte.jpg" width="32%"> <img src="Bilder/LoRa%20Modus/shot_20261016_201455_karte.jpg" width="32%"> <img src="Bilder/LoRa%20Modus/shot_20261016_201357_hoehentrack.jpg" width="32%">
+
+Gehörte Stationen auf der Karte (Übersicht und Einzelstations-Fokus) sowie die Stationsliste mit Entfernung
+und Alter.
+
+<details>
+<summary>Weitere LoRa-APRS-Screenshots</summary>
+
+<img src="Bilder/LoRa%20Modus/shot_20261016_201445_hoehentrack.jpg" width="32%"> <img src="Bilder/LoRa%20Modus/shot_20261016_151230_gps-radar.jpg" width="32%"> <img src="Bilder/LoRa%20Modus/shot_20261016_151259_text.jpg" width="32%">
+
+Stations-Detailpopup, GPS-Radar (Empfangsdiagnose der einzelnen Satelliten) und die Textansicht (hier noch im
+Sondenmodus-Frequenzbereich, Anzeige ist in beiden Modi gleich aufgebaut).
+
+</details>
+
 ## Status
 
 Aktive Hobby-Entwicklung, läuft im Feldeinsatz (Fuß/Fahrrad/Auto, Sondenjagd). Siehe Versionskommentare im
