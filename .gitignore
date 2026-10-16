@@ -1,0 +1,14 @@
+# Persoenliche Einstellungen (Rufzeichen, Heimat-Koordinaten) -- siehe config.h.example
+config.h
+
+# Arduino / build artifacts
+build/
+*.hex
+*.bin
+*.elf
+*.map
+
+# Editor/OS cruft
+.DS_Store
+Thumbs.db
+*.swp
