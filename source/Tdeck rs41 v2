@@ -61,7 +61,9 @@
 //    keine Internetverbindung. Sendeintervall dynamisch nach Tempo (SmartBeaconing): im Stand/<=10 km/h
 //    alle 30 min, >10 km/h alle 2 min, >50 km/h alle 30 s, zusaetzlich sofort bei zurueckgelegter Strecke
 //    seit dem letzten Beacon (<=10 km/h/zu Fuss: 100 m, sonst 1 km) -- je nachdem, was zuerst zutrifft
-//    (siehe aprsBeaconTick()). Der
+//    (siehe aprsBeaconTick()). Taucht eine Station NEU in der Liste auf (vorher unbekannt oder laenger als
+//    APRS_MAX_AGE_MS nicht gehoert), piept es zusaetzlich zum normalen Empfangston kurz auf -- hoeher bei
+//    direktem Funkempfang, tiefer bei Empfang ueber einen Digipeater (siehe aprsNewStationBeep()). Der
 //    eigentliche SondeHub-Upload bleibt unberuehrt und steht nach Ruecksprung in den Sondenempfang wieder
 //    genauso da wie vorher. Nach jedem Moduswechsel und jedem Neustart ist LoRa Upload immer aus (bewusst
 //    nicht gespeichert). Keine APRS-IS/iGate-Weiterleitung -- rein lokaler Funkbetrieb.
@@ -516,7 +518,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.66"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.67"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -2020,8 +2022,12 @@ static void aprsTrailAdd(int s, double lat, double lon) {
 // zufaellig als letztes neu angelegt wurde, solange sie seither nicht erneut gehoert wurde; dadurch wirkte
 // die Stationsliste bei vollem Puffer so, als wuerde immer nur eine einzelne Zeile ueberschrieben, statt
 // die am laengsten inaktive Station zu ersetzen).
-static int aprsFindOrAdd(const char *call) {
-  for (int i = 0; i < aprsN; i++) if (strncmp(aprsCall[i], call, 9) == 0) return i;
+// wasNew (optional, nullptr erlaubt): wird auf true gesetzt, wenn die Station NEU angelegt wurde (vorher
+// nicht in der Liste), sonst auf false -- fuer den Unterscheidungston "neue Station" (direkt/repeated,
+// siehe aprsStoreFromInfo()). Eine Station, die nur nach Verdraengung (voller Puffer) wiederverwendet wird,
+// zaehlt hier ebenfalls als "neu", weil sie fuer den Nutzer gerade zum ersten Mal in der Liste auftaucht.
+static int aprsFindOrAdd(const char *call, bool *wasNew) {
+  for (int i = 0; i < aprsN; i++) if (strncmp(aprsCall[i], call, 9) == 0) { if (wasNew) *wasNew = false; return i; }
   int i;
   if (aprsN < APRS_MAX) {
     i = aprsN++;
@@ -2032,6 +2038,7 @@ static int aprsFindOrAdd(const char *call) {
   strncpy(aprsCall[i], call, 9);
   aprsCall[i][9] = 0;
   aprsTrailN[i] = 0;
+  if (wasNew) *wasNew = true;
   return i;
 }
 
@@ -2305,7 +2312,9 @@ static void gpxTick() {
 // ---------- Empfangston (I2S, eingebauter Lautsprecher) ----------
 #define BEEP_RATE   16000                     // Abtastrate
 #define BEEP_MS     150                       // Tondauer
-#define BEEP_HZ     1800                      // Tonhoehe
+#define BEEP_HZ     1800                      // Tonhoehe (normaler Empfangs-/Sendeton)
+#define BEEP_HZ_NEU_DIREKT   2600              // neue Station DIREKT per Funk gehoert (hoeher)
+#define BEEP_HZ_NEU_REPEATED  900              // neue Station ueber Digipeater (Repeater) gehoert (tiefer)
 static bool beepReady = false;
 static uint32_t beepLastMs = 0;               // letzter Blip im Sekundenmodus (beepSec >= 5)
 
@@ -2330,21 +2339,24 @@ static void beepInit() {
   beepReady = true;
 }
 
-// Kurzer Sinuston mit sanfter Ein-/Ausblendung (kein Knacken), stereo, gleiches Signal auf beiden Kanaelen
-static void beepPlay() {
+// Kurzer Sinuston mit sanfter Ein-/Ausblendung (kein Knacken), stereo, gleiches Signal auf beiden Kanaelen.
+// hz waehlt die Tonhoehe -- so lassen sich mit derselben Klangerzeugung mehrere, am Klang unterscheidbare
+// Toene erzeugen (normaler Empfangs-/Sendeton BEEP_HZ, neue Station direkt/repeated siehe aprsStoreFromInfo()).
+static void beepPlayHz(int hz) {
   if (!beepReady) return;
   static int16_t buf[2 * (BEEP_RATE * BEEP_MS / 1000)];
   const int n = BEEP_RATE * BEEP_MS / 1000;
   const int ramp = n / 8;
   for (int i = 0; i < n; i++) {
     float env = (i < ramp) ? (float)i / ramp : ((i > n - ramp) ? (float)(n - i) / ramp : 1.0f);
-    int16_t v = (int16_t)(env * 24000.0f * sinf(2.0f * (float)M_PI * BEEP_HZ * i / BEEP_RATE));
+    int16_t v = (int16_t)(env * 24000.0f * sinf(2.0f * (float)M_PI * hz * i / BEEP_RATE));
     buf[2 * i] = v; buf[2 * i + 1] = v;
   }
   size_t written;
   i2s_write(I2S_NUM_0, buf, sizeof(buf), &written, pdMS_TO_TICKS(60));
   i2s_zero_dma_buffer(I2S_NUM_0);           // sofort auf Stille, statt auf den naechsten Unterlauf zu warten
 }
+static void beepPlay() { beepPlayHz(BEEP_HZ); }     // normaler Empfangs-/Sendeton (bisheriges Verhalten)
 
 static void ownTrailTick() {
   if (!ownTrailOn || !gps.fix || millis() - gps.lastFix > 5000) return;
@@ -7805,11 +7817,22 @@ static void aprsRawPreview(const uint8_t *d, size_t len, char *out, size_t outLe
 // aprsHandlePacket()), bestimmt die Punktfarbe auf der Karte (COL_APRS_*) und den "direkt gehoert"-Fokus.
 // viaCall != nullptr (nur bei kind == RECV_IGATE): das Paket kam als Fremdverkehr ueber dieses Rufzeichen
 // (z. B. das eigene iGate) an -- nur fuer die Logzeile, nicht fuer die Stationsliste selbst.
+// Unterscheidungston fuer eine NEU in der Liste aufgetauchte Station (Menue X/beepSec wie beim normalen
+// Empfangston -- "aus" bleibt stumm): RECV_DIRECT hoeher (BEEP_HZ_NEU_DIREKT), RECV_DIGI tiefer
+// (BEEP_HZ_NEU_REPEATED). RECV_IGATE (Fremdverkehr ueber APRS-IS/Internet, nicht per Funk gehoert) bekommt
+// bewusst keinen eigenen Ton -- hier geht es um per Funk NEU gehoerte Stationen.
+static void aprsNewStationBeep(uint8_t kind) {
+  if (beepSec == 0) return;
+  if (kind == RECV_DIRECT) beepPlayHz(BEEP_HZ_NEU_DIREKT);
+  else if (kind == RECV_DIGI) beepPlayHz(BEEP_HZ_NEU_REPEATED);
+}
+
 static bool aprsStoreFromInfo(const char *call, const char *info, const char *viaCall, uint8_t kind) {
   static const char *const kindTxt[3] = {"direkt", "digipeated", "Fremdverkehr"};
   double lat, lon;
   if (aprsParsePosition(info, lat, lon)) {
-    int idx = aprsFindOrAdd(call);
+    bool isNew = false;
+    int idx = aprsFindOrAdd(call, &isNew);
     aprsLat[idx] = (float)lat;
     aprsLon[idx] = (float)lon;
     aprsSeenMs[idx] = millis();
@@ -7820,11 +7843,13 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     if (viaCall) snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s ueber %s)", call, lat, lon, kindTxt[kind], viaCall);
     else snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s)", call, lat, lon, kindTxt[kind]);
     logLine(m);
+    if (isNew) aprsNewStationBeep(kind);
     return true;
   }
   char objName[10];
   if (aprsParseObject(info, objName, sizeof(objName), lat, lon)) {
-    int idx = aprsFindOrAdd(objName);     // Objektname (z. B. Sonden-ID) statt Rufzeichen des Digi/iGate
+    bool isNew = false;
+    int idx = aprsFindOrAdd(objName, &isNew);     // Objektname (z. B. Sonden-ID) statt Rufzeichen des Digi/iGate
     aprsLat[idx] = (float)lat;
     aprsLon[idx] = (float)lon;
     aprsSeenMs[idx] = millis();
@@ -7835,6 +7860,7 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     if (viaCall) snprintf(m, sizeof(m), "LoRa-APRS-Objekt: %s (ueber %s, %s ueber %s) bei %.5f %.5f", objName, call, kindTxt[kind], viaCall, lat, lon);
     else snprintf(m, sizeof(m), "LoRa-APRS-Objekt: %s (ueber %s, %s) bei %.5f %.5f", objName, call, kindTxt[kind], lat, lon);
     logLine(m);
+    if (isNew) aprsNewStationBeep(kind);
     return true;
   }
   return false;
