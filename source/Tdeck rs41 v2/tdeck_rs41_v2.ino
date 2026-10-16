@@ -518,7 +518,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.68"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.69"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -7763,10 +7763,21 @@ static bool aprsParseCompressed(const char *p, double &lat, double &lon) {
 // Unkomprimierte APRS-Position aus dem Infofeld lesen: "!"/"=" gefolgt von "DDMM.mmN/DDDMM.mmE..."
 // (Standard-APRS-Positionsformat), bei fehlendem Zahlen-Praefix Weiterleitung an aprsParseCompressed() oben
 // (komprimiertes Format faengt NIE mit zwei Ziffern an). Rueckgabe true bei Erfolg, lat/lon in Dezimalgrad.
-static bool aprsParsePosition(const char *info, double &lat, double &lon) {
+// "compressed" (falls uebergeben) berichtet zurueck, welches der beiden Formate gelesen wurde -- der Aufrufer
+// (aprsStoreFromInfo()) braucht das, um den Kommentar hinter der Position am RICHTIGEN Byte-Offset zu lesen:
+// komprimiert ist der Positionsteil nur 14, unkomprimiert dagegen 20 Byte lang (siehe aprsExtractComment()).
+// Bugfix Okt. 2026: vorher wurde bei komprimierten Paketen (die z. B. mehrere LoRa-iGates NUR senden, siehe
+// aprsParseCompressed() oben) immer der unkomprimierte 20-Byte-Offset benutzt -- das schnitt den Anfang des
+// echten Kommentars ab UND haengte stattdessen das Ende des Kommentars plus ein paar Byte Rauschen/Folgedaten
+// hinter dessen eigentlichem Ende an (sichtbares Symptom: "der TJ i-Gate Test" wurde zu "i-Gate Test!:%$R!").
+static bool aprsParsePosition(const char *info, double &lat, double &lon, bool *compressed = nullptr) {
   if (!(info[0] == '!' || info[0] == '=')) return false;
   const char *p = info + 1;
-  if (strlen(p) < 2 || !isdigit((unsigned char)p[0]) || !isdigit((unsigned char)p[1])) return aprsParseCompressed(p, lat, lon);
+  if (strlen(p) < 2 || !isdigit((unsigned char)p[0]) || !isdigit((unsigned char)p[1])) {
+    if (compressed) *compressed = true;
+    return aprsParseCompressed(p, lat, lon);
+  }
+  if (compressed) *compressed = false;
   if (strlen(p) < 18) return false;
   int dLat = (p[0] - '0') * 10 + (p[1] - '0');
   float mLat = aprsReadMin5(p + 2);
@@ -7866,7 +7877,8 @@ static void aprsNewStationBeep(uint8_t kind) {
 static bool aprsStoreFromInfo(const char *call, const char *info, const char *viaCall, uint8_t kind) {
   static const char *const kindTxt[3] = {"direkt", "digipeated", "Fremdverkehr"};
   double lat, lon;
-  if (aprsParsePosition(info, lat, lon)) {
+  bool compressed = false;
+  if (aprsParsePosition(info, lat, lon, &compressed)) {
     bool isNew = false;
     int idx = aprsFindOrAdd(call, &isNew);
     aprsLat[idx] = (float)lat;
@@ -7874,7 +7886,10 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     aprsSeenMs[idx] = millis();
     aprsRecvKind[idx] = kind;
     aprsTrailAdd(idx, lat, lon);
-    aprsExtractComment(info, 20, aprsComment[idx], sizeof(aprsComment[idx]));   // 1 ("!"/"=") + 18 (Position) + 1 (Symbol)
+    // Offset haengt vom Positionsformat ab (siehe aprsParsePosition()): unkomprimiert 1 ("!"/"=") + 18
+    // (Position) + 1 (Symbol) = 20, komprimiert 1 + 9 (Tabelle+Lat4+Lon4) + 1 (Symbol) + 2 (Kurs/Tempo)
+    // + 1 (Kompressions-Typ) = 14.
+    aprsExtractComment(info, compressed ? 14 : 20, aprsComment[idx], sizeof(aprsComment[idx]));
     char m[128];
     if (viaCall) snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s ueber %s)", call, lat, lon, kindTxt[kind], viaCall);
     else snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s)", call, lat, lon, kindTxt[kind]);
