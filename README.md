@@ -1,6 +1,6 @@
 # T-Deck RS41 – Wettersonden-Empfänger & LoRa-APRS-Tracker
 
-Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1?srsltid=AU7gw4XTKNjTB_l7i5qSKFlh0Ql-kE6qLw8yG6WAu95MsKPBSIrkMjWZ) (ESP32-S3, SX1262-Funkmodul),
+Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1) (ESP32-S3, SX1262-Funkmodul),
 die das Gerät in zwei Betriebsarten verwandelt:
 
 - **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (433 MHz, FSK) direkt über
