@@ -38,8 +38,32 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
 
 ## Flashen
 
-1. Einmalig per USB mit der Arduino-IDE flashen (Board-Einstellungen siehe Kopf von `tdeck_rs41_v2.ino`).
-2. Danach: WLAN im Menü (Taste `W`) mit dem Heimnetz verbinden (Menü `E` für SSID/Passwort) – das Gerät
+1. `config.h.example` im Sketch-Ordner nach `config.h` kopieren und dort eigenes Rufzeichen sowie
+   eigene Heimat-Koordinaten eintragen (`config.h` ist persönlich und per `.gitignore` von GitHub
+   ausgenommen).
+2. Einmalig per USB mit der Arduino-IDE flashen. Board- und Werkzeuge-Einstellungen (Arduino IDE 2.3.10):
+
+   | Einstellung | Wert |
+   |---|---|
+   | Board | ESP32S3 Dev Module |
+   | USB CDC On Boot | Enabled *(sonst kein Serial-Log über USB-C)* |
+   | CPU Frequency | 240MHz (WiFi) |
+   | Core Debug Level | None |
+   | USB DFU On Boot | Disabled |
+   | Erase All Flash Before Sketch Upload | Disabled |
+   | Events Run On | Core 1 |
+   | Flash Mode | QIO 80MHz |
+   | Flash Size | 16MB (128Mb) |
+   | JTAG Adapter | Disabled |
+   | Arduino Runs On | Core 1 |
+   | USB Firmware MSC On Boot | Disabled |
+   | Partition Scheme | 16M Flash (3MB APP/9.9MB FATFS) |
+   | PSRAM | OPI PSRAM |
+   | Upload Mode | UART0 / Hardware CDC |
+   | Upload Speed | 921600 |
+   | USB Mode | Hardware CDC and JTAG |
+   | Zigbee Mode | Disabled |
+3. Danach: WLAN im Menü (Taste `W`) mit dem Heimnetz verbinden (Menü `E` für SSID/Passwort) – das Gerät
    taucht dann unter Werkzeuge → Port als Netzwerkport auf (ArduinoOTA, kein Passwort nötig).
 
 ## Bedienung (Kurzreferenz)
