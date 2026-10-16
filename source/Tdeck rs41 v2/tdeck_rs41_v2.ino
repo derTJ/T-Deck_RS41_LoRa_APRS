@@ -518,7 +518,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.69"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.70"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -1962,6 +1962,11 @@ static float ownMinDist = 10.0f;
                                                    // da beide aus demselben Array lesen.
 static char aprsCall[APRS_MAX][10];
 static float aprsLat[APRS_MAX], aprsLon[APRS_MAX];
+static float aprsRssi[APRS_MAX], aprsSnr[APRS_MAX];   // Pegel/SNR der zuletzt EMPFANGENEN Funkuebertragung
+                                                        // dieser Station (siehe aprsStoreFromInfo()/aprsPoll()) --
+                                                        // bei RECV_IGATE (Fremdverkehr) also Pegel/SNR des
+                                                        // relayenden iGates, nicht der Ursprungsstation, dieselbe
+                                                        // Einschraenkung wie beim echten APRS-IS/RF-Uebergang.
 static uint32_t aprsSeenMs[APRS_MAX];
 static float aprsTrailLat[APRS_MAX][APRS_TRAIL_MAX], aprsTrailLon[APRS_MAX][APRS_TRAIL_MAX];
 static int aprsTrailN[APRS_MAX];
@@ -2058,6 +2063,8 @@ static void aprsRemove(int i) {
     aprsCall[k][9] = 0;
     aprsLat[k] = aprsLat[k + 1];
     aprsLon[k] = aprsLon[k + 1];
+    aprsRssi[k] = aprsRssi[k + 1];
+    aprsSnr[k] = aprsSnr[k + 1];
     aprsSeenMs[k] = aprsSeenMs[k + 1];
     aprsRecvKind[k] = aprsRecvKind[k + 1];
     aprsTrailN[k] = aprsTrailN[k + 1];
@@ -3635,8 +3642,16 @@ static void altTrackUpdate() {
         if (ageS < 3600) snprintf(ageb, sizeof(ageb), "%lu:%02lu", (unsigned long)(ageS / 60), (unsigned long)(ageS % 60));
         else snprintf(ageb, sizeof(ageb), "%luh", (unsigned long)(ageS / 3600));
         double d = haversineKm(hLat, hLon, aprsLat[i], aprsLon[i]);
+        // Pegel/SNR vor die Zeit gesetzt (Wunsch Okt. 2026); "vor" wird weggelassen, wenn die Zeile mit allen
+        // Feldern sonst zu lang fuer die Zeile wuerde (Bildschirm 320px breit, Textgroesse 1 = 6px/Zeichen,
+        // Zeile beginnt bei x=12) -- MAXLN so gewaehlt, dass der "(Klick: Info)"-Hinweis bei x=220 (unten)
+        // in der ueberwiegenden Zahl der Faelle noch nicht ueberschrieben wird.
         char ln[64];
-        snprintf(ln, sizeof(ln), "%-9s %6.1f km  vor %s", aprsCall[i], d, ageb);
+        const int MAXLN = 38;
+        snprintf(ln, sizeof(ln), "%-9s %6.1f km %4.0fdBm %4.1fdB vor %s", aprsCall[i], d, aprsRssi[i], aprsSnr[i], ageb);
+        if ((int)strlen(ln) > MAXLN) {
+          snprintf(ln, sizeof(ln), "%-9s %6.1f km %4.0fdBm %4.1fdB %s", aprsCall[i], d, aprsRssi[i], aprsSnr[i], ageb);
+        }
         bool sel = (i == aprsListSel);                // per Trackball markierte Station (siehe aprsListMoveSel())
         if (sel) frameCanvas->fillRect(0, y - 2, 320, 11, COL_RADAR_RING);
         // Herkunft des Pakets vorangestellt, wie auf der Karte farblich unterschieden (aprsRecvKind[], siehe
@@ -3652,7 +3667,9 @@ static void altTrackUpdate() {
         frameCanvas->setTextColor(sel ? ST77XX_BLACK : (ageS < 300 ? ST77XX_WHITE : COL_RADAR_TEXT));
         frameCanvas->setCursor(12, y);
         frameCanvas->print(ln);
-        if (sel && aprsComment[i][0]) {                 // Hinweis, dass ein Trackballklick mehr zeigt
+        if (sel && aprsComment[i][0] && (int)strlen(ln) <= MAXLN) {   // Hinweis, dass ein Trackballklick mehr
+                                                          // zeigt -- bei MAXLN-Ueberschreitung (siehe oben)
+                                                          // wuerde er den Zeilentext an x=220 ueberdecken
           frameCanvas->setCursor(220, y);
           frameCanvas->print("(Klick: Info)");
         }
@@ -7874,7 +7891,8 @@ static void aprsNewStationBeep(uint8_t kind) {
   else if (kind == RECV_DIGI) beepPlayHz(BEEP_HZ_NEU_REPEATED);
 }
 
-static bool aprsStoreFromInfo(const char *call, const char *info, const char *viaCall, uint8_t kind) {
+static bool aprsStoreFromInfo(const char *call, const char *info, const char *viaCall, uint8_t kind,
+                               float rssi, float snr) {
   static const char *const kindTxt[3] = {"direkt", "digipeated", "Fremdverkehr"};
   double lat, lon;
   bool compressed = false;
@@ -7883,6 +7901,8 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     int idx = aprsFindOrAdd(call, &isNew);
     aprsLat[idx] = (float)lat;
     aprsLon[idx] = (float)lon;
+    aprsRssi[idx] = rssi;
+    aprsSnr[idx] = snr;
     aprsSeenMs[idx] = millis();
     aprsRecvKind[idx] = kind;
     aprsTrailAdd(idx, lat, lon);
@@ -7903,6 +7923,8 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     int idx = aprsFindOrAdd(objName, &isNew);     // Objektname (z. B. Sonden-ID) statt Rufzeichen des Digi/iGate
     aprsLat[idx] = (float)lat;
     aprsLon[idx] = (float)lon;
+    aprsRssi[idx] = rssi;
+    aprsSnr[idx] = snr;
     aprsSeenMs[idx] = millis();
     aprsRecvKind[idx] = kind;
     aprsTrailAdd(idx, lat, lon);
@@ -7931,7 +7953,7 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
 // Weiterreichen ein "*" an das zuletzt benutzte Pfadfeld). Enthaelt der Pfad ein "*", wurde das Paket
 // unterwegs per Funk ueber mindestens einen Digipeater geleitet (RECV_DIGI), sonst kam es ohne jeden
 // Zwischenschritt direkt von der sendenden Station (RECV_DIRECT).
-static bool aprsHandlePacket(uint8_t *d, size_t len) {
+static bool aprsHandlePacket(uint8_t *d, size_t len, float rssi, float snr) {
   aprsStripHeader(d, len);
   if (len == 0 || len >= 200) return false;
   d[len] = 0;                               // als C-String behandeln (Aufrufer reserviert 1 Byte mehr)
@@ -7949,9 +7971,9 @@ static bool aprsHandlePacket(uint8_t *d, size_t len) {
     if (!innerInfo) return false;
     char innerCall[12];
     if (!aprsParseCall(inner, innerCall, sizeof(innerCall))) return false;
-    return aprsStoreFromInfo(innerCall, innerInfo + 1, call, RECV_IGATE);
+    return aprsStoreFromInfo(innerCall, innerInfo + 1, call, RECV_IGATE, rssi, snr);
   }
-  return aprsStoreFromInfo(call, payload, nullptr, pathDigi ? RECV_DIGI : RECV_DIRECT);
+  return aprsStoreFromInfo(call, payload, nullptr, pathDigi ? RECV_DIGI : RECV_DIRECT, rssi, snr);
 }
 
 // Wird in jeder loop()-Runde im LoRa-Modus aufgerufen (statt des RS41-Suchlaufs): auf ein Paket pruefen,
@@ -7981,7 +8003,7 @@ static void aprsPoll() {
       aprsLastRxMs = millis();
       aprsLastRssi = rssi;
       aprsLastSnr = snr;
-      bool ok = aprsHandlePacket(buf, len);
+      bool ok = aprsHandlePacket(buf, len, rssi, snr);
       if (ok) aprsRxOk++;
       else {
         char prev[101];          // grosszuegiger als zu Beginn (4.19): auch verschachtelter Fremdverkehr
