@@ -358,6 +358,27 @@
 //  - Firmware-Version jetzt dauerhaft sichtbar statt nur kurz im Bootsplash: im Geraetemenue (drawMenu())
 //    klein unter dem Statusblock oben rechts, und auf beiden Weboberflaechen (webIndex()/webMenu()) als
 //    kleine Fusszeile ganz unten.
+//  - Stationsliste scrollt jetzt: war die markierte Station erst durch neuere Stationen nach unten
+//    verdraengt, wurde sie unsichtbar (Liste zeichnete immer nur von oben). aprsListScroll haelt die
+//    Auswahl jetzt moeglichst mittig im sichtbaren Fenster (altTrackUpdate()), dazu eine Positionsanzeige
+//    ("von/bis/gesamt") oben rechts, sobald ueberhaupt gescrollt wird. Neu: Backspace in der Stationsliste
+//    hebt die Auswahl (und ein offenes Zusatzinfo-Popup) wieder auf.
+//  - Bug bei komprimierten APRS-Positionsmeldungen behoben: aprsExtractComment() nahm bisher immer einen
+//    festen Header-Offset von 20 Byte an (korrekt fuer das unkomprimierte Format) -- komprimierte Reports
+//    (base91, APRS101 Kap. 9.4.4) haben aber nur einen 14-Byte-Header, der Kommentar begann dadurch zu
+//    spaet (Anfang abgeschnitten) und las zusaetzlich echte, aber zum Kommentar nicht gehoerende Folgebytes
+//    mit ein. aprsParsePosition() meldet das Format jetzt zurueck, aprsStoreFromInfo() waehlt den Offset
+//    (14/20) entsprechend.
+//  - Pegel und SNR der zuletzt empfangenen Funkuebertragung je Station (aprsRssi[]/aprsSnr[]) werden jetzt
+//    in der Stationsliste vor der Zeitangabe mitangezeigt -- das Wort "vor" entfaellt automatisch, wenn die
+//    Zeile mit allen Feldern sonst zu lang fuer die 320px-Zeile wuerde (siehe MAXLN in altTrackUpdate()).
+//  - Bug bei Screenshot-Dateinamen behoben: gfxView==1 zeigt je nach Funkmodus komplett Verschiedenes
+//    (Sondenmodus: Hoehentrack, LoRa-Modus: Stationsliste, siehe altTrackUpdate()) -- der Dateiname nannte
+//    bisher beides pauschal "...hoehentrack.jpg". Im LoRa-Modus heisst er jetzt "...stationsliste.jpg".
+//    Betrifft nur neu aufgenommene Screenshots, nicht bereits vorhandene Dateien.
+//  - Stationstabelle auf der Weboberflaeche (/malt, webAltStat()) zeigt jetzt dieselben Zusatzspalten wie
+//    die Geraete-Stationsliste: Herkunftskennung D/R/I vorangestellt und farblich wie auf der Karte/am
+//    Geraet (blau/orange/rot, COL_APRS_DIRECT/DIGI/IGATE), dazu Pegel (dBm) und SNR (dB) je Station.
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -518,7 +539,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.70"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.71"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -4444,7 +4465,10 @@ static bool takeScreenshot(bool inMenu, char *msg, size_t msgLen) {
   }
   uint8_t exif[700];
   int en = buildExif(exif, sizeof(exif), lat, lon, alt, desc);
-  const char *vn = inMenu ? "menue" : (!mapMode ? "text" : (gfxView == 0 ? "karte" : (gfxView == 1 ? "hoehentrack" : "gps-radar")));
+  // gfxView == 1 zeigt je nach Funkmodus komplett Verschiedenes (Sondenmodus: Hoehentrack: LoRa-APRS:
+  // Stationsliste, siehe altTrackUpdate()) -- der Dateiname muss das unterscheiden, sonst heissen
+  // LoRa-Stationslisten-Screenshots irrefuehrend "...hoehentrack.jpg".
+  const char *vn = inMenu ? "menue" : (!mapMode ? "text" : (gfxView == 0 ? "karte" : (gfxView == 1 ? (radioMode == 1 ? "stationsliste" : "hoehentrack") : "gps-radar")));
   char name[64], path[96];
   if (timeSet) {
     time_t t = time(nullptr);
@@ -6699,10 +6723,16 @@ static void webMenu() {
                      "var h='<p style=\"color:#888\">Pakete: '+(d.rxtot||0)+' ('+(d.rxok||0)+' ok)'+"
                      "((d.rxtot)?(', letztes vor '+d.rxage+'s, '+d.rssi+' dBm'):'')+'</p>';"
                      "if(!d.st||!d.st.length)h+='<p>Noch keine Station gehoert</p>';"
-                     "else{h+='<table><tr><th>Rufzeichen</th><th>km</th><th>zuletzt</th></tr>';"
+                     // Farben wie am Geraet (COL_APRS_DIRECT/DIGI/IGATE, siehe altTrackUpdate()): D = direkt
+                     // per Funk gehoert (blau), R = ueber einen Digipeater-Hop weitergereicht (orange), I =
+                     // Fremdverkehr ueber ein iGate/APRS-IS relayt (rot). Pegel/SNR seit v4.70 auch hier mit
+                     // ausgegeben, damit die Webtabelle optisch dasselbe zeigt wie die Stationsliste am Geraet.
+                     "else{var kc={D:'#0000ff',R:'#ff8e00',I:'#ff0000'};"
+                     "h+='<table><tr><th></th><th>Rufzeichen</th><th>km</th><th>dBm</th><th>SNR</th><th>zuletzt</th></tr>';"
                      "d.st.forEach(function(s){var a=s.age,as=a<3600?"
                      "(Math.floor(a/60)+':'+String(a%60).padStart(2,'0')):(Math.floor(a/3600)+'h');"
-                     "h+='<tr><td>'+s.c+'</td><td>'+s.km.toFixed(1)+'</td><td>'+as+'</td></tr>';});"
+                     "h+='<tr><td style=\"color:'+(kc[s.k]||kc.D)+';font-weight:bold\">'+s.k+'</td><td>'+s.c+'</td>"
+                     "<td>'+s.km.toFixed(1)+'</td><td>'+s.rssi+'</td><td>'+s.snr+'</td><td>'+as+'</td></tr>';});"
                      "h+='</table>';}"
                      "lst.innerHTML=h;"
                      "}else{"
@@ -6877,8 +6907,13 @@ static void webAltStat() {
       int i = idx[k];
       double d = haversineKm(hLat, hLon, aprsLat[i], aprsLon[i]);
       uint32_t ageS = (millis() - aprsSeenMs[i]) / 1000;
+      // Herkunftskennung D/R/I wie in der Geraete-Liste (altTrackUpdate(), siehe COL_APRS_*) sowie die seit
+      // v4.70 pro Station erfassten Pegel/SNR-Werte (aprsRssi[]/aprsSnr[]) -- damit die Webtabelle unten
+      // (loadAlt()) optisch dasselbe zeigen kann wie die Geraete-Ansicht, inkl. Farbe.
+      const char *kindTag = (aprsRecvKind[i] == RECV_IGATE) ? "I" : (aprsRecvKind[i] == RECV_DIGI) ? "R" : "D";
       if (k) j += ",";
-      j += "{\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) + "}";
+      j += "{\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) +
+           ",\"k\":\"" + String(kindTag) + "\",\"rssi\":" + String(aprsRssi[i], 0) + ",\"snr\":" + String(aprsSnr[i], 1) + "}";
     }
     j += "]}";
   } else {
