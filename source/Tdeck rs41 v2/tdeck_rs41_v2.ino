@@ -379,6 +379,12 @@
 //  - Stationstabelle auf der Weboberflaeche (/malt, webAltStat()) zeigt jetzt dieselben Zusatzspalten wie
 //    die Geraete-Stationsliste: Herkunftskennung D/R/I vorangestellt und farblich wie auf der Karte/am
 //    Geraet (blau/orange/rot, COL_APRS_DIRECT/DIGI/IGATE), dazu Pegel (dBm) und SNR (dB) je Station.
+//  - Bug behoben: "R" aus der Stationsliste heraus (Einzelstations-Fokus, siehe aprsSoloIdx) zeigte zwar
+//    per Toast/Statuszeile korrekt "Fokus <Rufzeichen>" an, zentrierte die Karte aber nicht auf die Station,
+//    wenn die Karte vorher manuell gezoomt/verschoben war (A/D-Tasten oder Trackball) -- mapViewSetup()
+//    ignoriert die uebergebenen Punkte komplett, solange mapManual gesetzt ist. Der normale Fokuswechsel auf
+//    der Karte selbst (focusCycleOrRecenter(), Taste R dort) setzt mapManual deshalb immer zuerst zurueck;
+//    das fehlte im zweiten, aus der Stationsliste kommenden R-Pfad und ist jetzt ergaenzt.
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -539,7 +545,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.71"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.72"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -7345,7 +7351,13 @@ static void handleInput() {
     aprsSoloIdx = aprsListSel;
     aprsPopupShown = false;
     gfxView = 0;
-    viewZ = -1;                 // neu einzoomen, damit "Ich" und die Station beide ins Bild passen
+    mapManual = false;          // Bugfix Okt. 2026: war die Karte manuell gezoomt/verschoben (A/D/Trackball),
+                                 // ignorierte mapViewSetup() sonst die Stationsposition komplett und blieb bei
+                                 // der zuletzt manuell gewaehlten Kartenmitte stehen -- Toast/Statuszeile zeigten
+                                 // trotzdem "Fokus <Rufzeichen>" an (die lesen nur aprsSoloIdx, nicht mapManual),
+                                 // was wie ein nicht wirkender Fokus aussah. focusCycleOrRecenter() (Taste R auf
+                                 // der Karte selbst) macht das schon richtig, hier fehlte die gleiche Zeile.
+    viewZ = -1;                 // neu einzoomen, damit die Station mittig ins Bild passt
     toast("Fokus", aprsCall[aprsSoloIdx]);
     gfxUpdate();
     return;
