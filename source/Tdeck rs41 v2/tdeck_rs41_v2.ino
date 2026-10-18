@@ -5,6 +5,10 @@
 //   config.h.example im selben Ordner nach config.h kopieren und darin das
 //   eigene Rufzeichen sowie die eigenen Heimat-Koordinaten eintragen.
 //   config.h ist persoenlich (steht in .gitignore, landet NICHT auf GitHub).
+//   settings.h muss ebenfalls im selben Ordner liegen (eigener Tab in der
+//   Arduino-IDE) -- anders als config.h ist sie NICHT persoenlich und wird
+//   normal mitgeliefert/committet; sie sammelt alle allgemein einstellbaren
+//   Werte (Timings, Schwellwerte, Popup-Anzeigedauern, Farben, WLAN usw.).
 // ===========================================================================
 //
 // Neu gegenueber dem Empfangstest:
@@ -479,6 +483,18 @@
 //    toast() selbst ruft jetzt nur noch toastFor(..., 1800) auf, keine Verhaltensaenderung fuer alle anderen
 //    Toasts) -- hier mit 5000 ms, weil die Meldung sonst waehrend der Fahrt/des Laufens kaum zu lesen ist, und
 //    verschwindet danach automatisch wieder (toastTick() loescht sie wie jeden anderen Toast nach Ablauf).
+//  - NEU: settings.h -- alle allgemein einstellbaren Werte (Timings, Popup-/Toast-/Menue-Anzeigedauern,
+//    GPS-Filter-Schwellwerte, Scan-Parameter, Beacon-Takt, Puffer-/Listengroessen, Farben, WLAN-Zugangsdaten,
+//    Verzeichnisse usw. -- rund 150 Konstanten) aus dem .ino in eine neue, eigene Datei settings.h verschoben,
+//    jeweils mit kurzer Erklaerung, was der Wert bewirkt. Anders als config.h (persoenliches Rufzeichen +
+//    Heimat-Koordinaten) ist settings.h NICHT in .gitignore und wird normal committet -- Erweiterungen bauen
+//    zukuenftig auf diesen Werten auf bzw. ergaenzen/aendern sie dort, statt einzelne Zahlen verstreut im Code
+//    zu suchen. Bewusst NICHT verschoben: Pins, Radio-Protokollkonstanten (APRS_SF/CR/SYNCWORD/PREAMBLE,
+//    RS41-Frameformat) und fest indexgekoppelte Code-Tabellen (z. B. menuKey[]/menuName[], aprsSymbolChars[]/
+//    aprsSymbolNames[], bwList[]) -- die bleiben im .ino, weil sie Struktur/Protokoll sind, keine Einstellung.
+//    Zwei bisher nur als Zahl im Code stehende Rueckmeldungs-Timings sind dabei neu benannt worden:
+//    TOAST_MS_DEFAULT/TOAST_MS_LONG (siehe toastFor()) und MENU_NOTE_MS. settings.h muss im selben Ordner
+//    liegen wie dieses .ino (eigener Tab in der Arduino-IDE) -- ohne sie compiliert der Sketch nicht mehr.
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -520,6 +536,14 @@
 #include <vector>
 #include <algorithm>
 
+// Allgemeine einstellbare Werte (Timings, Schwellwerte, Popup-Dauer, Farben, WLAN-Zugangsdaten usw.) stehen
+// jetzt gesammelt in settings.h (siehe dort fuer Erklaerungen) -- im Unterschied zu config.h (persoenliches
+// Rufzeichen/Heimat-Koordinaten, siehe weiter unten) ist settings.h NICHT in .gitignore und wird normal mit
+// hochgeladen: Erweiterungen/neue Firmware-Versionen bauen auf diesen Werten auf bzw. passen settings.h an,
+// statt verstreute Zahlen im Code zu aendern. Muss vor den Pin-/Farbdefinitionen unten stehen, braucht aber
+// bereits ST77XX_* (COL_*-Farben) aus Adafruit_ST7789.h, deshalb erst hier (nach den Bibliotheks-Includes).
+#include "settings.h"
+
 // Muss vor der ersten Funktion stehen: die Arduino IDE erzeugt die Funktionsprototypen automatisch am Dateianfang
 struct FileInfo { String name; uint32_t size; time_t t; };
 // Eine Datei im ZIP-Download (webZipSend): path ist der volle SD-Pfad zum Lesen, arc der Name, unter dem
@@ -556,12 +580,12 @@ static char gpxIchName[40] = "?";        // <name> im GPX-Track: Startdatum/-uhr
 // "Ich"-Track (idStr/Name) + Zeitstempel, in den Settings (NVS) gesichert, damit sie einen Reboot ueberleben
 // (anders als gpxIchId/gpxIchName oben, die bei jedem Start leer anfangen). Liegt der Neustart hoechstens
 // GPX_RESUME_GRACE_S zurueck, wird dieselbe Datei/derselbe Track fortgesetzt statt ein neuer angelegt.
-#define GPX_RESUME_GRACE_S  300  // 5 Minuten Karenzzeit (Wunsch Okt. 2026)
+// GPX_RESUME_GRACE_S -- siehe settings.h
 static char gpxResumeId[20] = "";
 static char gpxResumeName[40] = "";
 static uint32_t gpxResumeTs = 0;        // Unixzeit (time(nullptr)) der letzten Sicherung, 0 = keine vorhanden
 static char gpxRecoveredBy[40] = "";    // Melder-Name/Rufzeichen fuer SondeHub-Fundmeldungen (Taste Q), hier weil schon loadSettings() darauf zugreift
-#define GPX_BUF_CAP  300         // PSRAM-Zwischenspeicher je Spur (Punkte), bevor spaetestens auf die SD geschrieben wird
+// GPX_BUF_CAP -- siehe settings.h
 static GpxPoint *gpxBufIch = nullptr, *gpxBufSonde = nullptr;
 static int gpxCountIch = 0, gpxCountSonde = 0;
 static uint32_t gpxLastFlushMs = 0;
@@ -589,58 +613,16 @@ static uint32_t gpxLastFlushMs = 0;
 #define PIN_I2S_WS      5
 #define PIN_I2S_DOUT    6
 
-// ---------- Einstellungen ----------
-#define TFT_INVERT     true
+// ---------- Einstellungen ---------- (TFT_INVERT, Farben usw. siehe settings.h)
 
 // ---------- Farben der Kartenmarker (RGB565) ----------
 // Eigene Farben: 0xRRRR-Wert = ((R & 0xF8) << 8) | ((G & 0xFC) << 3) | (B >> 3)
-#define COL_SONDE_OK      ST77XX_GREEN    // Sonde: gueltige Position vor < 4 s (Fuellfarbe, s. lastPosOkMs)
-#define COL_SONDE_LATE    ST77XX_YELLOW   // Sonde: 4..19 s keine gueltige Position
-#define COL_SONDE_LOST    ST77XX_RED      // Sonde: 20 s oder laenger keine gueltige Position
-#define COL_SONDE_RING    ST77XX_BLACK    // Ring um den Sondenpunkt (normal)
-#define COL_SONDE_RING_SIG ST77XX_GREEN   // Ring kurz gruen: Schritt 1 (Header) gerade empfangen, aber (noch) keine
-                                           // gueltige Position in diesem Takt -- s. lastRxMs/SONDE_SIGNAL_FLASH_MS
-#define SONDE_SIGNAL_FLASH_MS 1000UL       // so lange blinkt der Ring nach einem blossen Signal-Empfang (ohne Position)
-#define COL_ICH_FILL      0x07FF          // ich: Fuellung cyan (0, 255, 255) -- gut sichtbar auf allen Kartenarten,
-                                          // frueher lila und kaum vom violetten Radwegenetz der OpenCycleMap zu unterscheiden
-#define COL_ICH_RING      ST77XX_BLACK    // ich: Ring
-#define COL_LINE          ST77XX_RED      // Linie zwischen mir und der Sonde (2 Pixel breit)
-#define COL_OWN_TRAIL     0xF81F          // eigener Track, magenta (255, 0, 255) -- frueher violett, verschmolz mit dem
-                                          // violetten Radwegenetz der OpenCycleMap und mit der (jetzt cyanen) Ich-Fuellung
-#define COL_TRAIL         0xFC60          // Spur der Sonde (orange, 255/140/0)
-#define COL_PRED          0x041F          // Landevorhersage: Verlaengerung der Spur + Fadenkreuz (blau, 0/128/255)
-#define COL_PRED_ONLINE   ST77XX_YELLOW   // Online-Landevorhersage (Tawhiri/SondeHub-API): nur Fadenkreuz, gelb
-#define CROSS_HALF        6               // Fadenkreuz Landepunkt: halbe Linienlaenge in Pixeln
-#define COL_RADAR_RING    0x0400          // Radar: Ringe und Kreuz (dunkelgruen)
-#define COL_RADAR_TEXT    0x8410          // Radar: Beschriftungen (grau)
-#define COL_ALT_FILL      0x12EB          // Hoehentrack: Flaechenfuellung unter der Kurve (dunkles Petrol, #145e5e --
-                                          // RGB565-Entsprechung derselben Farbe wie im Chart der Weboberflaeche, siehe
-                                          // loadAlt()/ctx.fillStyle in webMenu(), damit Geraet und Website gleich aussehen)
-// LoRa-APRS-Stationspunkte (drawAprsStations()), Farbe je nach Empfangsart (siehe aprsRecvKind[]):
-#define COL_APRS_DIRECT   0x001F          // direkt per Funk gehoert (blau, 0/0/255)
-#define COL_APRS_IGATE    ST77XX_RED      // als Fremdverkehr ueber ein iGate/APRS-IS relayt ("}"-Praefix, rot)
-#define COL_APRS_DIGI     0xFC60          // ueber einen genutzten ("*"-markierten) Digipeater-Hop weitergereicht
-                                          // (orange, 255/140/0 -- bewusst = COL_TRAIL, dieselbe Farbe wie die Sondenspur)
-#define VERBOSE_DUMP   0       // 1 = Rohdaten/entwuerfelte Frames als Hex seriell ausgeben (lange Ausgabe), 0 = aus
+// Farben der Kartenmarker (COL_*), CROSS_HALF, SONDE_SIGNAL_FLASH_MS -- siehe settings.h
+// VERBOSE_DUMP -- siehe settings.h
 #define PIN_BAT_ADC    4       // Batteriespannung ueber Spannungsteiler 1:2
-const float BAT_SCALE  = 2.0f;         // Teilerfaktor
-const float BAT_OFFSET = 0.0f;         // Korrektur in Volt (mit Multimeter abgleichen; die gemessene Spannung steht in der Logzeile)
-const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB/Ladespannung als angesteckt
-#define TZ_RULE        "CET-1CEST,M3.5.0,M10.5.0/3"   // Ortszeit fuer Dateizeiten und Logzeilen (Mitteleuropa mit Sommerzeit)
-#define WIFI_SSID      "T-Deck-RS41"           // WLAN-Zugangspunkt des T-Deck (Menue W)
-#define WIFI_PASS      "sonde433"              // mindestens 8 Zeichen, bitte aendern
-#define SHOT_DIR       "/shots"                // Screenshots (Taste C)
-#define GPX_DIR        "/gpx"                  // GPX-Tracks (eigene Position + Sonde)
-#define LOG_DIR        "/log"                  // Text-Logs (an/aus im Menue P; je Neustart ein frisches Log)
-#define WIFI_HOST      "tdeck-rs41"            // Rechnername im Heimnetz: http://tdeck-rs41.local
-#define WIFI_LOST_MS   10000                   // so lange darf die Heimnetz-Verbindung weg sein (z. B. kurzer Aussetzer),
-                                                // bevor das WLAN als "Netz verlassen" gilt und abgeschaltet wird
-#define WIFI_IDLE_OFF_MS (5UL * 60UL * 1000UL)  // eigener Zugangspunkt (immer nur manuell im Menue W gestartet, NIE
-                                                // automatisch): geht nach so langer Zeit ohne verbundenes Geraet
-                                                // von selbst wieder aus (spart Akku). Gilt nicht fuer das Heimnetz --
-                                                // dort haengt das T-Deck ohnehin am Strom, WLAN bleibt an, solange
-                                                // die Verbindung steht (siehe WIFI_LOST_MS oben).
-#define TITLE_TEXT     "RS41 | Enter=Menue  Space=Ansicht"
+// BAT_SCALE/BAT_OFFSET/BAT_USB_V -- siehe settings.h
+// TZ_RULE -- siehe settings.h
+// WIFI_SSID/PASS/HOST/LOST_MS/IDLE_OFF_MS, SHOT_DIR/GPX_DIR/LOG_DIR, TITLE_TEXT -- siehe settings.h
 // ===========================================================================
 // PERSOENLICHE EINSTELLUNGEN (Rufzeichen, Heimat-Koordinaten): siehe config.h
 // Vor dem ersten Compilieren: config.h.example nach config.h kopieren und dort
@@ -649,7 +631,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.83"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.84"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -661,25 +643,18 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 #define PIN_TB_RIGHT   2
 #define PIN_TB_CLICK   0
 #define KB_CMD_BRIGHT  0x01    // Tastatur-Controller (ESP32-C3): 2-Byte-Befehl 0x01 + Helligkeit 0..255 setzt das Tastenlicht
-#define KB_LEVEL       120     // Helligkeit des Tastenlichts (0..255)
-#define KB_LEVEL_DIM    25     // Modus 2 "Taste+dunkel": gedimmte Grundhelligkeit, solange keine Taste gedrueckt wird
-#define KB_ON_MS       6000    // so lange leuchten die Tasten nach dem letzten Tastendruck
-#define KB_BRIGHT_MS   4000    // Modus 2: so lange bleibt es nach einem Tastendruck hell, bevor es wieder dimmt
-#define KB_DARK_ELEV   (-1.0)  // "dunkel" = Sonne tiefer als dieser Winkel unter dem Horizont [Grad]
-#define TB_PULSES      2       // so viele Trackball-Impulse gelten als ein Schritt (bei Bedarf anpassen)
+// KB_LEVEL/KB_LEVEL_DIM/KB_ON_MS/KB_BRIGHT_MS/KB_DARK_ELEV/TB_PULSES -- siehe settings.h
 // Kein Mindest-Impulsschwellwert fuers Scrollen mehr (Okt. 2026): der sollte vor Ausloesen durch Stoesse/
 // Vibration in der Autohalterung schuetzen, waehrend der Fahrt wird der Trackball aber ohnehin per Taste 0
 // gesperrt (tbLockMode) -- jeder einzelne Trackball-Impuls scrollt die Karte jetzt sofort (siehe mapNavTick()).
-#define NTP_SERVER     "pool.ntp.org"   // fuer die Uhrzeit beim Einschalten, solange noch kein GPS-Fix vorliegt
-#define NTP_TIMEOUT_MS 8000    // so lange wird nach dem Verbinden auf eine gueltige NTP-Antwort gewartet, dann aufgegeben
-#define LOG_LEVEL      0       // 0 = eine Zeile pro Frame, 1 = zusaetzlich alle Blockdetails
+// NTP_SERVER/NTP_TIMEOUT_MS, LOG_LEVEL -- siehe settings.h
 // Keine Platz-Rotation mehr: jeder Neustart beginnt ein frisches Log ohne eigene Groessenbegrenzung, benannt
 // nach Datum/Uhrzeit, sobald GPS/NTP eine Uhrzeit liefert (siehe startLog()/onTimeSet()). Bis dahin (und wenn
 // in einer Sitzung gar keine Uhrzeit zu bekommen ist) bekommt es stattdessen eine Platzhalter-Nummer
 // 01..LOG_FALLBACK_MAX (die erste noch freie, einfach hochgezaehlt, nichts wird dabei ueberschrieben; nur im
 // unrealistischen Fall, dass wirklich alle Nummern bis LOG_FALLBACK_MAX belegt sind, faengt es wieder bei 01 an).
-#define LOG_FALLBACK_MAX 99
-#define SD_LOG         1       // 1 = Zeile pro Frame zusaetzlich auf die SD-Karte schreiben (/log/rs41_log_*.txt)
+// LOG_FALLBACK_MAX -- siehe settings.h
+// SD_LOG -- siehe settings.h
 #define VLOG(...)   do { if (LOG_LEVEL >= 1) Serial.printf(__VA_ARGS__); } while (0)
 #define VLOGLN(s)   do { if (LOG_LEVEL >= 1) Serial.println(s); } while (0)
 const float TCXO_V     = 1.8;
@@ -694,35 +669,15 @@ const float RX_BW_DEFAULT = 23.4;       // Standard-Bandbreite fuer Feinscan und
 // Header 0x3C/0xFF/0x01 vor der eigentlichen TNC2-Textzeile (siehe aprsStripHeader()) sowie das Sync-Wort
 // 0x12 sind eine verbreitete Konvention einzelner LoRa-APRS-Implementierungen (nicht Teil des offiziellen
 // APRS-Protokolls) -- noch nicht an echtem Empfang getestet, siehe Versionshinweis am Dateianfang.
-const float APRS_FREQ_MHZ = 433.775;
-const float APRS_BW_KHZ   = 125.0;
+// APRS_FREQ_MHZ/APRS_BW_KHZ -- siehe settings.h
 #define APRS_SF        12
 #define APRS_CR        5
 #define APRS_SYNCWORD  0x12
 #define APRS_PREAMBLE  8
 
 // Zweistufiger Scan: erst grob mit sehr breitem Filter, dann fein nur um die Kandidaten
-const float COARSE_STEP = 0.2;          // MHz
-#define NCOARSE 31                      // (406-400)/0.2 + 1
-const float COARSE_BW   = 467.0;        // kHz, breiter Filter = wenige Schritte noetig
-const float FINE_SPAN   = 0.12;         // MHz links/rechts vom Kandidaten
-#define FINE_PASSES 4                   // Feinscan-Durchlaeufe (Maximum je Frequenz); die Sonde sendet nicht durchgehend
-const float BAND_MIN    = 400.15;       // Wettersonden-Band beginnt bei 400,15 MHz; darunter werden keine Kandidaten gewaehlt
-const float FINE_STEP   = 0.010;        // MHz
-#define MAX_CAND 4                      // so viele Kandidaten werden nacheinander geprueft
-const float REL_MARGIN  = 4.0;          // dB ueber dem Median (Rauschen) gilt im Grobscan als Signal
-#define SCAN_SWEEPS 5                   // Grobscan wird gemittelt ueber so viele Durchlaeufe (laenger = empfindlicher)
-const float FINE_MARGIN = 6.0;          // Feinscan: Peak muss so viele dB ueber dem Median liegen, sonst kein Decodierversuch
-#define ACQ_MS   1350                   // Decodierversuch pro Kandidat (RS41 sendet 1 Frame/s)
-#define LOST_MS  5000                   // so lange ohne Frame, dann zurueck zum Scan
-#define STICKY_MS (20UL * 1000UL)       // nach einer decodierten Sonde: so lange noch gezielt auf ihrer letzten
-                                         // Frequenz weiterlauschen (kein voller Suchlauf), bevor wirklich aufgegeben
-                                         // wird -- ein Grobscan ueber 400-406 MHz dauert mehrere Sekunden, in denen
-                                         // nichts empfangen wird (macht den Sondenton unregelmaessig), waehrend ein
-                                         // kurzer Empfangsausfall (Signalschwund, Antennendrehung der Sonde) meist
-                                         // nur Sekunden dauert, die Sonde selbst aber noch da ist
-#define SV_MIN  4                       // Sondenposition erst ab so vielen Satelliten (sonst kommt (0,0,0) = "kein Fix")
-#define SETTLE_US 1000                  // Einschwingzeit vor der RSSI-Messung
+// Scan-Parameter (COARSE_STEP/NCOARSE/COARSE_BW/FINE_SPAN/FINE_PASSES/BAND_MIN/FINE_STEP/MAX_CAND/REL_MARGIN/
+// SCAN_SWEEPS/FINE_MARGIN/ACQ_MS/LOST_MS/STICKY_MS/SV_MIN/SETTLE_US) -- siehe settings.h
 
 #define FRAME_LEN  320      // Laenge eines normalen RS41-Frames
 #define CAP1_LEN   180      // Schritt 1: Bytes nach dem Header (Frame-Pos. 8..187)
@@ -836,19 +791,19 @@ static bool aprsBeaconLastSet = false;                        // 1-km-Wegstrecke
 // direkt vor jedem radio.transmit() angewendet. SX1262-Bereich -9..+22 dBm; Standardwert 10 dBm entspricht
 // RadioLibs eigenem Default (radio.begin() ohne power-Parameter) -- also unveraendertes Verhalten, bis jemand
 // am Menuepunkt dreht.
-static int8_t txPowerDbm = 10;
+static int8_t txPowerDbm = TXPWR_DEFAULT_DBM;
 // APRS-Symbol fuer den eigenen Beacon: wird automatisch aus dem aktuellen GPS-Tempo abgeleitet (siehe
 // aprsSymbolTick()), keine manuelle Einstellung. Primaere Symboltabelle "/", die aprsEncodePosition() schon fest
 // einbaut. Index 0..3 in aprsSymbolChars[]/aprsSymbolNames[] -- absteigend nach Tempo gestaffelt, damit sich der
 // jeweilige Schwellenwert direkt neben dem passenden Symbol findet.
-#define NSYMBOL 4
+// NSYMBOL -- siehe settings.h (MUSS zu aprsSymbolChars[]/aprsSymbolNames[] unten und zu drawTravelIcon() passen)
 // Index 0 ("Stationaer") bewusst NICHT das Haus-Symbol ('-', feste QTH-Station) -- das Geraet ist dabei
 // portabel und nur gerade nicht in Bewegung (z. B. beim Peilen/Suchen zu Fuss am Fundort), keine feste
 // Station. "/" (roter Punkt, primaere Symboltabelle) ist der uebliche generische Platzhalter fuer genau
 // diesen Fall: aktuelle Position ohne Bewegungsaussage, ohne ein Gebaeude zu suggerieren.
 static const char aprsSymbolChars[NSYMBOL]       = {'/',            '[',            'b',        'v'};
 static const char *const aprsSymbolNames[NSYMBOL] = {"Stationaer",   "Fussgaenger",  "Fahrrad",  "Bus"};
-static const float aprsSymbolMinKmh[NSYMBOL]      = {0.0f,           2.0f,           10.0f,      30.0f};
+// aprsSymbolMinKmh[] -- siehe settings.h
 static uint8_t aprsSymbolIdx = 0;          // aktuell AKTIVES Symbol (erst nach Hysterese umgeschaltet)
 static uint8_t aprsSymbolCand = 0;         // aus dem Tempo gerade berechnete Zielstufe
 static uint32_t aprsSymbolCandSinceMs = 0; // seit wann aprsSymbolCand ununterbrochen gilt (0 = gerade erst gewechselt)
@@ -958,10 +913,10 @@ static double bigZ = -1, bigCx = 0, bigCy = 0;   // Zoom/Mitte, auf die bigCanva
 static int bigStyle = -1;                   // Kartenart, mit der bigCanvas zuletzt gefuellt wurde (-1 = nie); siehe bigTilesReady() --
                                              // ohne diesen Vergleich haelt ein Kartenart-Wechsel (Taste M) die alten Kacheln fuer
                                              // "schon geladen" und zeichnet sie nie neu, bis der Rand ohnehin woanders nachlaedt
-#define BIG_TILES_MAX 8                     // Kachelraster-Grosse (je Achse) -- reicht fuer Bildschirm + 2 Kacheln Rand mit Luft
+// BIG_TILES_MAX -- siehe settings.h
 static bool bigTileLoaded[BIG_TILES_MAX][BIG_TILES_MAX];
 static long bigTileBaseTx = 0, bigTileBaseTy = 0;   // Kachelkoordinate der oben-links-Kachel in bigCanvas (Raster-Ursprung)
-#define BIG_REFILL_MAX_TILES (BIG_TILES_MAX * BIG_TILES_MAX)
+// BIG_REFILL_MAX_TILES -- siehe settings.h
 static int16_t bigRefillTx[BIG_REFILL_MAX_TILES], bigRefillTy[BIG_REFILL_MAX_TILES];
 static int16_t bigRefillSx[BIG_REFILL_MAX_TILES], bigRefillSy[BIG_REFILL_MAX_TILES];  // Zielposition in bigCanvas
 static int bigRefillCount = 0, bigRefillIdx = 0;   // Warteschlange: Index 0 bis bigRefillIdx-1 schon erledigt, Rest offen
@@ -1061,14 +1016,7 @@ void drawFixedPanel(float liveDbm) {
 }
 
 // ---------- Karten-Selbsttest: Kacheln auf der SD-Karte (/tiles/<z>/<x>/<y>.png, OSM-Schema) ----------
-#define TILE_TEST   0                  // 1 = Selbsttest beim Start (Ordnerlisten bei Zoom 17/18 dauern ca. 1 Minute), 0 = aus
-#define TILE_DIR    "/tiles"                   // Basiskarte (OpenCycleMap), auch Ersatz fuer fehlende Kacheln, PNG: /tiles/<z>/<x>/<y>.png
-#define TILE_DIR_TOPO "/tiles_topo"            // Topografische Karte (z. B. DTK + Schummerung), JPG oder PNG: /tiles_topo/<z>/<x>/<y>.jpg
-#define TILE_DIR_TOPPLUS "/tiles_topplus"      // TopPlusOpen (BKG, bundesweit), JPG oder PNG: /tiles_topplus/<z>/<x>/<y>.jpg
-#define TILE_DIR_RELIEF "/tiles_relief"        // Gelaendeschummerung, JPG oder PNG: /tiles_relief/<z>/<x>/<y>.jpg
-#define TILE_DIR_SAT "/tiles_sat"              // reines Luftbild, JPG: /tiles_sat/<z>/<x>/<y>.jpg
-#define TILE_BLANK_BYTES 2048                  // JPG-Kacheln bis zu dieser Groesse sind leer (ausserhalb der Abdeckung) -> Basiskarte
-#define TILE_ZOOM   16                 // Zoomstufe der Testanzeige (falls dort keine Kachel liegt: naechstniedrigere)
+// TILE_TEST/TILE_DIR*/TILE_BLANK_BYTES/TILE_ZOOM -- siehe settings.h
 const double TEST_LAT = HOME_LAT;      // Position aus dem Empfangstest, nur zum Pruefen der Kacheln (HOME_LAT/LON siehe config.h)
 const double TEST_LON = HOME_LON;
 
@@ -1076,16 +1024,15 @@ const double TEST_LON = HOME_LON;
 // HOME_LAT/HOME_LON kommen aus config.h (siehe #include "config.h" oben)
 const double LAND_ALT_DEFAULT = 100.0;          // erwartete Landehoehe in "Sondenhoehe" (WGS84-Ellipsoid, in Deutschland etwa Meereshoehe + 47 m);
                                        // Tipp: Hoehe, die die Sonde am Boden am Startort anzeigt
-#define PRED_MIN_SINK 1.0              // Landevorhersage erst ab dieser Sinkrate [m/s] (= 3,6 km/h)
+// PRED_MIN_SINK -- siehe settings.h
 #define PIN_GPS_RX  44                 // T-Deck Plus: GPS-TX -> ESP32-RX (Baudrate wird beim Start erkannt)
 #define PIN_GPS_TX  43
-#define MAP_MIN_Z   6                  // kleinste / groesste Zoomstufe der Kartenansicht
-#define MAP_MAX_Z   19                 // echte Kacheln vorhanden (z. B. tiles_topo bis Stufe 19); fehlt eine Kachel
+// MAP_MIN_Z/MAP_MAX_Z -- siehe settings.h
                                        // bei dieser Stufe fuer die gerade gewaehlte Kartenart, faellt drawTileStyled()
                                        // wie ueberall sonst auf die Basiskarte (Rad) zurueck -- kein Hochskalieren mehr
-#define MAP_IDLE_Z  15                 // Zoomstufe der Karte, solange keine Sonde empfangen wurde (Menue Z ueberschreibt)
+// MAP_IDLE_Z -- siehe settings.h
 
-#define PAN_DIR      1                 // Scrollrichtung: 1 = Karte folgt der Trackball-Richtung, -1 = umgekehrt
+// PAN_DIR -- siehe settings.h
 
 // Seit FW 3.0 nur noch ganze Zoomstufen (kein Kommazahl-/"stufenloser" Anzeige-Zoom mehr, siehe effZoom()/
 // renderBackground()/mapViewSetup()) -- der grosse Kartenhintergrund mit Rand (bigCanvas, schnelles Trackball-
@@ -1172,7 +1119,7 @@ static bool drawJpgTile(const char *path, int sx, int sy) {
 // die noch nicht gepackt sind.
 #define BUNDLE_HDR_LEN  16
 #define BUNDLE_REC_LEN  20
-#define BUNDLE_MAX_TILE (400 * 1024)      // groesste Kachel, die aus einem Bundle gelesen wird (PSRAM-Puffer)
+// BUNDLE_MAX_TILE -- siehe settings.h
 
 // Kachelordner je Kartenart -- muss vor den Bundle-Funktionen stehen, die ihn per Index ansprechen
 static const char *const styleDir[NSTYLE] = {TILE_DIR, TILE_DIR_SAT, TILE_DIR_TOPO, TILE_DIR_RELIEF, TILE_DIR_TOPPLUS};
@@ -1247,7 +1194,7 @@ static bool bundleReadTile(int slotIdx, int style, int zoom, int part, uint32_t 
 // fuer Kacheln, die Frame fuer Frame erneut angefragt werden (z.B. durch das staendige Neuzeichnen von
 // tightFollow in Sondennaehe). Pro Slot (Kartenart/Basiskarte) ein kleiner Ringpuffer, bei Style-/Zoomwechsel
 // automatisch ungueltig, weil der Treffer zusaetzlich auf (style, zoom) geprueft wird.
-#define MISS_CACHE_N 64
+// MISS_CACHE_N -- siehe settings.h
 struct MissEntry { int8_t style; int8_t zoom; int32_t x; int32_t y; };
 static MissEntry missCache[2][MISS_CACHE_N];
 static int missCacheN[2] = {0, 0};
@@ -1308,7 +1255,7 @@ static bool drawTileStyled(int z, long x, long y, int sx, int sy) {
 // fuer die Kartendarstellung/Aufzeichnung, dazu kommen kurz lebende (Log, Listing, Screenshot, Webserver).
 // Mit dem alten Default liefen beim Vollbetrieb (Karte + Aufzeichnung) irgendwann alle SD.open()-Aufrufe
 // (auch das Log selbst) mit "no free file descriptors" ins Leere.
-#define SD_MAX_OPEN_FILES 12
+// SD_MAX_OPEN_FILES -- siehe settings.h
 static bool sdReady = false;
 static bool sdInit() {
   if (!sdReady) {
@@ -1411,8 +1358,7 @@ static int gsvVisibleTotal() {
 // jede Sekunde), obwohl der Redraw selbst (siehe satRadarUpdate()) schon gedrosselt war -- diesmal lag es an
 // der Tabellengroesse, nicht am Redraw-Takt. 64 Plaetze (RAM-Kosten minimal) decken auch volle Mehrkonstellation
 // mit Reserve ab.
-#define SAT_MAX 64
-#define SAT_TIMEOUT_MS 8000UL
+// SAT_MAX/SAT_TIMEOUT_MS -- siehe settings.h
 struct SatInfo { char talker[3] = {0, 0, 0}; int prn = 0; int elev = -1; int azim = -1; int snr = 0; uint32_t ms = 0; };
 static SatInfo satTable[SAT_MAX];
 
@@ -1564,9 +1510,7 @@ static int twoDigits(const char *s) { return (s[0] - '0') * 10 + (s[1] - '0'); }
 // zuletzt akzeptierten Position unplausibel weit entfernt ist ALS AUCH vom jeweils naechsten Fix nicht
 // bestaetigt wird - eine echte, anhaltende Bewegung (z.B. Auto auf der Autobahn) wird dadurch schon ab
 // dem zweiten Fix wieder uebernommen, ein einzelner Ausreisser bleibt dagegen aussen vor.
-static const float GPS_MAX_SPEED_MS = 55.0f;         // ~200 km/h + Marge, deckt Auto/Rad/Fuss grosszuegig ab
-static const float GPS_JUMP_MARGIN_M = 50.0f;        // zusaetzliche Toleranz gegen normales GPS-Jittern
-static const uint32_t GPS_GLITCH_TIMEOUT_MS = 120000UL;  // nach 2 Min. auch unbestaetigt uebernehmen (z.B. nach Tunnel/Empfangsloch)
+// GPS_MAX_SPEED_MS/GPS_JUMP_MARGIN_M/GPS_GLITCH_TIMEOUT_MS -- siehe settings.h
 // Satellitengeometrie-Schranke fuer die "Sprung vom naechsten Fix bestaetigt"-Uebernahme (siehe gpsFilterFix()):
 // etwas grosszuegiger als GPS_SEND_MAX_HDOP (das Senden soll strenger sein als die reine Spuranzeige), aber
 // streng genug, um eine mehrsekuendige, korrelierte Mehrwege-Drift (die sich sonst selbst "bestaetigt") abzuwehren.
@@ -1574,7 +1518,7 @@ static const uint32_t GPS_GLITCH_TIMEOUT_MS = 120000UL;  // nach 2 Min. auch unb
 // bestaetigt, aber Geometrie zu schlecht" (4 Sat, HDOP 4.8..5.5) ueber mehrere Sekunden, bis ein Fix mit
 // knapp 5 Sat/HDOP 4.8 -- also immer noch schwacher Geometrie -- den angesammelten ~680-m-Sprung doch noch
 // durchliess (wirkte dann wie ein Wandern mit ~40 km/h im Stand). 5.0 war dafuer offenbar zu durchlaessig.
-static const float GPS_FILTER_MAX_HDOP = 3.5f;
+// GPS_FILTER_MAX_HDOP -- siehe settings.h
 // Mindest-Satellitenzahl fuer dieselbe Uebernahme -- NACHTRAEGLICH ergaenzt: ein Log zeigte mehrere ueber
 // mehrere Sekunden "bestaetigte" Spruenge von 500 m bis ueber 12 km, alle mit nur 3 Satelliten. Mit 3 Satelliten
 // ist nicht mal ein reguaerer 3D-Fix moeglich (x/y/z + Uhrfehler braucht 4) -- der gemeldete HDOP ist dann
@@ -1582,7 +1526,7 @@ static const float GPS_FILTER_MAX_HDOP = 3.5f;
 // Ohne diese zusaetzliche Schranke konnte die HDOP-Pruefung allein genau diese Faelle nicht abfangen. Mit dem
 // 17.10.-Log (s. o., durchgehend nur 4-5 genutzte Satelliten in der betroffenen Phase) ebenfalls auf 5 angehoben,
 // sonst haette schon ein knapper 4-Sat-Fix wieder gereicht.
-static const int GPS_FILTER_MIN_SATS = 5;
+// GPS_FILTER_MIN_SATS -- siehe settings.h
 
 static bool ownFiltValid = false;                    // letzte akzeptierte (gefilterte) Position
 static double ownFiltLat = 0, ownFiltLon = 0;
@@ -1597,8 +1541,7 @@ static uint32_t ownPendMs = 0;
 // reinen 2D-Fix zurueck) liefert das GPS-Modul dabei gelegentlich eine einzelne, klar falsche Hoehe -- meist
 // genau 0 m --, obwohl die Position weiter stimmt. Nur ein einzelner, unbestaetigter Sprung wird verworfen;
 // wirklich 0 m (z. B. am Meer) bleibt erhalten, sobald der naechste Fix das bestaetigt.
-static const float GPS_ALT_JUMP_M = 40.0f;                    // Hoehensprung, der als Ausreisser gilt
-static const uint32_t GPS_ALT_GLITCH_TIMEOUT_MS = 120000UL;   // nach 2 Min. auch unbestaetigt uebernehmen
+// GPS_ALT_JUMP_M/GPS_ALT_GLITCH_TIMEOUT_MS -- siehe settings.h
 
 static bool ownAltFiltValid = false;                 // letzte akzeptierte (gefilterte) Hoehe
 static float ownAltFiltVal = 0;
@@ -1725,8 +1668,7 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
 // GEOMETRIE (HDOP): 5 gut ueber den Himmel verteilte Satelliten koennen genauer sein als 7 eng zusammenstehende.
 // Die Sat-Zahl bleibt nur noch als grobe Untergrenze (das theoretische Minimum fuer einen 3D-Fix), die
 // eigentliche Entscheidung trifft HDOP. hdop <= 0 heisst "noch kein HDOP-Wert vorhanden" und gilt als schlecht.
-static const int GPS_SEND_MIN_SATS = 4;              // theoretisches Minimum fuer einen 3D-Fix (x/y/z + Uhrfehler)
-static const float GPS_SEND_MAX_HDOP = 2.5f;         // <1 exzellent, 1..2 gut, 2..5 brauchbar, >5 fragwuerdig (Richtwerte)
+// GPS_SEND_MIN_SATS/GPS_SEND_MAX_HDOP -- siehe settings.h
 static bool gpsFixGoodEnoughToSend() {
   return gps.fix && gps.sats >= GPS_SEND_MIN_SATS && gps.hdop > 0 && gps.hdop <= GPS_SEND_MAX_HDOP;
 }
@@ -1974,7 +1916,7 @@ static double sondeLat = 0, sondeLon = 0, sondeAlt = 0;
 // (kein Fuellen der Luecke). Puffer liegt im PSRAM (siehe setup()), reicht bei RS41-typisch 1 Paket/s
 // komfortabel fuer mehrstuendige Fluege; waere er doch einmal voll, werden weitere Pakete verworfen und
 // die bisherige Kurve bleibt unangetastet erhalten (niemals rueckwirkend ausgeduennt).
-#define ALT_TRACK_MAX 14400
+// ALT_TRACK_MAX -- siehe settings.h
 static float *altTrackAlt = nullptr;            // Hoehe [m] je empfangenem Paket
 static uint32_t *altTrackMs = nullptr;          // Zeitpunkt (millis(), relativ zum Trackbeginn) je Paket
 static int altTrackN = 0;
@@ -2006,8 +1948,7 @@ static uint32_t predEtaS = 0;                           // Restzeit bis zur Land
 // vorhergesagten Landepunkt nicht sofort um die volle Reststrecke verschieben. Zwei Stufen: (1) die ENU-
 // Geschwindigkeit, mit der predictLanding() rechnet, wird per Tiefpass geglaettet; (2) der daraus berechnete
 // Landepunkt selbst wird nochmal geglaettet, statt bei jedem Update hart zu springen.
-#define PRED_SMOOTH_IN_ALPHA  0.25f      // Glaettung der Geschwindigkeit (0..1, kleiner = traeger/ruhiger)
-#define PRED_SMOOTH_OUT_ALPHA 0.3f       // Glaettung des Landepunkts selbst
+// PRED_SMOOTH_IN_ALPHA/PRED_SMOOTH_OUT_ALPHA -- siehe settings.h
 static float predVe = 0, predVn = 0, predVz = 0;        // geglaettete Ost/Nord/Oben-Geschwindigkeit fuer die Vorhersage
 static bool predVelInit = false;
 static bool predPtInit = false;                         // predLat/predLon schon eingeschwungen?
@@ -2024,7 +1965,7 @@ static void ecefVelToEnu(double lat, double lon, double vx, double vy, double vz
 // Track-Verdichtung (fuer Sondenspur UND eigenen Track): die letzten KEEP_RECENT_KM bleiben IMMER in voller
 // Aufloesung erhalten (aktuelle Position/Landung ist am wichtigsten) -- nur der aeltere Teil einer Spur wird bei
 // Bedarf ausseduennt (jeder zweite Punkt weg), sobald der Puffer voll wird.
-#define KEEP_RECENT_KM 5.0f
+// KEEP_RECENT_KM -- siehe settings.h
 
 // Laeuft vom Ende der Spur rueckwaerts, bis die Summe der Punktabstaende KEEP_RECENT_KM erreicht.
 // Rueckgabe: Index, ab dem (bis n-1) die Spur unangetastet bleiben muss.
@@ -2051,7 +1992,7 @@ static int trailCompressOld(float *lat, float *lon, int n, int from) {
 // Spur der Sonde: Punkte werden nur bei mindestens trailMinDist Metern Abstand gespeichert;
 // ist der Puffer voll, wird der aeltere Teil ausseduennt (siehe trailCompressOld), die letzten
 // KEEP_RECENT_KM bleiben unangetastet. trailMinDist waechst nur noch im Notfall (siehe unten).
-#define TRAIL_MAX 800
+// TRAIL_MAX -- siehe settings.h
 static float trailLat[TRAIL_MAX], trailLon[TRAIL_MAX];
 static int trailN = 0;
 static float trailMinDist = 20.0f;
@@ -2085,7 +2026,7 @@ static void trailAdd(double lat, double lon, const char *id) {
   trailN++;
 }
 // Eigener Track: GPS-Positionen des T-Deck, gleiches Ausduennen wie bei der Sondenspur
-#define OWN_MAX 600
+// OWN_MAX -- siehe settings.h
 static float ownLat[OWN_MAX], ownLon[OWN_MAX];
 static int ownN = 0;
 static float ownMinDist = 10.0f;
@@ -2099,10 +2040,7 @@ static float ownMinDist = 10.0f;
 // werden -- der Speicher dafuer ist mit gut 0,5 KB pro Station (vor allem der Fahrstreifen-Trail) auch bei
 // doppelter Kapazitaet verschwindend klein, und die Stationsliste/Karte zeigen ohnehin nur so viele
 // Eintraege, wie Bildschirmplatz da ist (siehe idleMapUpdate(), "while (... && y < 230)").
-#define APRS_MAX 32
-#define APRS_TRAIL_MAX 40
-#define APRS_TRAIL_KM 5.0f
-#define APRS_MAX_AGE_MS (30UL * 60UL * 1000UL)   // Station komplett aus der Liste entfernen, wenn laenger
+// APRS_MAX/APRS_TRAIL_MAX/APRS_TRAIL_KM/APRS_MAX_AGE_MS -- siehe settings.h
                                                    // nicht mehr gehoert (siehe aprsPrune()) -- betrifft
                                                    // Stationsliste (Geraet/Web) UND Karte gleichermassen,
                                                    // da beide aus demselben Array lesen.
@@ -2130,7 +2068,7 @@ static uint8_t aprsRecvKind[APRS_MAX];
 // (aprsListSel/aprsPopupShown, siehe handleInput()/altTrackUpdate()). 120 Byte sind reichlich: der rohe
 // Empfangspuffer (aprsPoll(), buf[256]) deckt praktisch jedes realistische APRS-Infofeld schon ab, 120 Byte
 // Kommentar allein liegen weit ueber dem, was Stationen in der Praxis an Freitext anhaengen.
-#define APRS_COMMENT_LEN 120
+// APRS_COMMENT_LEN -- siehe settings.h
 static char aprsComment[APRS_MAX][APRS_COMMENT_LEN];
 static int aprsListSel = -1;        // Raw-Index (nicht Sortierposition!) der markierten Station in der Liste;
                                      // -1 = keine Auswahl (noch nicht navigiert, oder Station inzwischen
@@ -2323,7 +2261,7 @@ static int wrapTextLines(const char *text, int maxChars, char lines[][48], int m
 // (physisch auf die Karte geschrieben) wird nur einmal je gpxDrain()-Aufruf, nicht pro Punkt.
 // Bei jedem (Wieder-)Start bzw. bei einer neuen Sonde beginnt ein frisches <trkseg> innerhalb desselben <trk>.
 static bool gpxOn = true;               // GPX-Tracks mitschreiben (Menue J)
-#define GPX_FLUSH_MS 30000              // automatisch auf die SD schreiben, spaetestens alle 30 s
+// GPX_FLUSH_MS -- siehe settings.h
 // Baut aus einer Sonden-ID einen dateinamensicheren String (nur Buchstaben/Ziffern); leer oder mit "?" -> "unbekannt"
 static void gpxSafeId(const char *id, char *out, size_t n) {
   bool bad = !id || !id[0];
@@ -2494,11 +2432,7 @@ static void gpxTick() {
 
 
 // ---------- Empfangston (I2S, eingebauter Lautsprecher) ----------
-#define BEEP_RATE   16000                     // Abtastrate
-#define BEEP_MS     150                       // Tondauer
-#define BEEP_HZ     1800                      // Tonhoehe (normaler Empfangs-/Sendeton)
-#define BEEP_HZ_NEU_DIREKT   2600              // neue Station DIREKT per Funk gehoert (hoeher)
-#define BEEP_HZ_NEU_REPEATED  900              // neue Station ueber Digipeater (Repeater) gehoert (tiefer)
+// BEEP_RATE/BEEP_MS/BEEP_HZ/BEEP_HZ_NEU_DIREKT/BEEP_HZ_NEU_REPEATED -- siehe settings.h
 static bool beepReady = false;
 static uint32_t beepLastMs = 0;               // letzter Blip im Sekundenmodus (beepSec >= 5)
 
@@ -2822,18 +2756,7 @@ static void predictLanding() {
 //    sobald die Sonde wirklich platzt und zu sinken beginnt (dann greift der erste Fall mit echten Werten).
 // Takt: alle TAWHIRI_RETRY_MS (5 min), aber alle TAWHIRI_RETRY_FAST_MS (1 min), sobald die Sonde unter
 // TAWHIRI_FAST_ALT_M (3000 m) UND dabei tatsaechlich im Sinkflug ist (dann zaehlt jede Minute).
-#define TAWHIRI_URL              "https://api.v2.sondehub.org/tawhiri"
-#define TAWHIRI_RETRY_MS         300000UL     // normal alle 5 Minuten eine neue Online-Vorhersage versuchen
-#define TAWHIRI_RETRY_FAST_MS     60000UL     // unterhalb TAWHIRI_FAST_ALT_M im Sinkflug: alle 1 Minute
-#define TAWHIRI_FAST_ALT_M         3000.0     // Hoehenschwelle fuer den schnelleren Takt
-#define TAWHIRI_BURST_ALT_DEFAULT_M 30000.0   // Schaetzwert fuer die Platzhoehe, solange die Sonde noch steigt
-                                               // (die echte Platzhoehe ist erst nach dem Platzen bekannt) --
-                                               // typischer Bereich fuer Wetterballone, nur eine grobe Hausnummer
-#define TAWHIRI_FALLBACK_VZ0          5.0     // Schaetzwert fuer die Sinkrate NACH dem (noch nicht erfolgten)
-                                               // Platzen [m/s, auf Meereshoehe bezogen, wie von der API erwartet]
-                                               // -- auch nur eine Hausnummer, wird durch die echte Rate ersetzt,
-                                               // sobald die Sonde wirklich sinkt
-#define TAWHIRI_MAX_SONDE_AGE_MS 300000UL     // keine Anfrage mehr, wenn seit > 5 Minuten kein Paket mehr kam
+// TAWHIRI_URL/RETRY_MS/RETRY_FAST_MS/FAST_ALT_M/BURST_ALT_DEFAULT_M/FALLBACK_VZ0/MAX_SONDE_AGE_MS -- siehe settings.h
 
 static bool onlinePredValid = false;
 static double onlinePredLat = 0, onlinePredLon = 0;    // Landepunkt (letzter Punkt des Abstiegs, siehe jsonLastNumber())
@@ -2844,7 +2767,7 @@ static uint32_t onlinePredNextMs = 0;         // naechster erlaubter Versuch
 // ONLINE_PRED_PATH_MAX gleichmaessig ueber den Abstieg verteilte Punkte, siehe parseOnlinePredPath().
 // onlinePredPathN < 2 heisst "keine Strecke geparst" -- die Aufrufer zeichnen dann ersatzweise nur die
 // Gerade zum Landepunkt (onlinePredLat/Lon), wie bisher.
-#define ONLINE_PRED_PATH_MAX 48
+// ONLINE_PRED_PATH_MAX -- siehe settings.h
 static float onlinePredPathLat[ONLINE_PRED_PATH_MAX];
 static float onlinePredPathLon[ONLINE_PRED_PATH_MAX];
 static int onlinePredPathN = 0;
@@ -3446,7 +3369,7 @@ static void showCentered(double lat, double lon, int z) {
 // Schwelle fuer die "grosse Schrift"-Statuszeile auf der Kartenseite: schneller als Gehen/Stehen (z. B. im Auto
 // oder zuegig mit dem Rad) -- dann zaehlen nur noch wenige, grosse, aus der Ferne/vom Lenker ablesbare Werte;
 // unterhalb bleibt die gewohnte dreizeilige Detailanzeige in Kleinschrift unveraendert.
-#define OWN_SPEED_BIG_KMH 8.0f
+// OWN_SPEED_BIG_KMH -- siehe settings.h
 
 // Testhilfe: erzwingt die "grosse Schrift"-Statuszeile ohne tatsaechlich schnell zu fahren (Taste N, siehe
 // handleInput()). -1 = aus (normales GPS-Tempo gilt), sonst der Testwert in km/h. Bewusst nur im RAM, kein
@@ -5497,9 +5420,7 @@ static void wifiTick() {
 }
 
 // Texteingabe ueber die Tastatur (alle Zeichen, Backspace loescht, Enter uebernimmt). Rueckgabe: Laenge der Eingabe (0 = leer)
-#define FIND_BORDER 4           // Rahmenbreite (Px) fuer die Fundmeldungs-Bildschirme (findPick/textInput/findConfirm):
-                                 // deutlich anderer Look als die normale Kartenansicht, bei Sonnenlicht im Feld
-                                 // auf den ersten Blick von der Live-Anzeige zu unterscheiden
+// FIND_BORDER -- siehe settings.h
 static void drawFindBorder(Adafruit_GFX *g) {
   g->fillRect(0, 0, 320, FIND_BORDER, ST77XX_RED);
   g->fillRect(0, 240 - FIND_BORDER, 320, FIND_BORDER, ST77XX_RED);
@@ -5513,7 +5434,7 @@ static void drawFindBorder(Adafruit_GFX *g) {
 // nie zwischengespeichert. Der Entwurf wird beim normalen Verlassen von textInput() geloescht; ueberlebt er,
 // heisst das: das Geraet ist waehrend dieser Eingabe abgestuerzt/neu gestartet, und textInput() bietet ihn
 // beim naechsten Aufruf mit demselben Titel automatisch als Vorbelegung an (anstelle von "current").
-#define DRAFT_IDLE_MS 3000
+// DRAFT_IDLE_MS -- siehe settings.h
 static void draftPathFor(const char *title, char *buf, size_t n) {
   size_t j = 0;
   if (j < n - 1) buf[j++] = '/';
@@ -5735,7 +5656,7 @@ static void netSetup() {
 // (hoch/runter) oder O/P blaettert man durch, die Spur + der Endpunkt der gewaehlten Sonde werden auf der Karte
 // angezeigt. Bestaetigt (Klick/Enter) wird mit dem LETZTEN GPX-Punkt dieser Sonde -- bei der gerade laufend
 // empfangenen Sonde ist das die frischeste Live-Position (noch nicht unbedingt auf die SD geschrieben).
-#define FIND_PICK_MAX 40
+// FIND_PICK_MAX -- siehe settings.h
 static char findPickId[FIND_PICK_MAX][9];
 static uint32_t findPickTime[FIND_PICK_MAX];
 static int findPickN = 0;
@@ -5744,7 +5665,7 @@ static int findPickSel = 0;
 // In dieser Sitzung zuletzt empfangene Sonden-IDs (neueste zuerst) -- damit findPickScan() im Normalfall GAR
 // NICHT die SD-Karte durchsuchen muss (das machte Taste Q langsam: jede GPX-Datei im Verzeichnis wurde dafuer
 // angefasst). Wird bei jedem Sondenwechsel aktualisiert (siehe gpxSafeId()-Aufruf im RS41-Decoder).
-#define FIND_PICK_RECENT_MAX 20
+// FIND_PICK_RECENT_MAX -- siehe settings.h
 static char findPickRecentId[FIND_PICK_RECENT_MAX][9];
 static int findPickRecentN = 0;
 
@@ -5758,7 +5679,7 @@ static void findPickRecentNote(const char *id) {
   if (found < 0 && findPickRecentN < FIND_PICK_RECENT_MAX) findPickRecentN++;
 }
 
-#define FIND_TRACK_MAX 300
+// FIND_TRACK_MAX -- siehe settings.h
 static float findTrackLat[FIND_TRACK_MAX], findTrackLon[FIND_TRACK_MAX];
 static int findTrackN = 0;
 
@@ -6197,10 +6118,7 @@ static void jsonEsc(const char *s, char *out, size_t cap) {
 // mit einer kurzen Fehlermeldung in errOut.
 // Warteliste fuer Fundmeldungen ohne Internet (bis RECOVERY_QUEUE_MAX Eintraege, als fertige JSON-Zeilen
 // auf der SD-Karte). Aelteste Zeile zuerst; wird im Heimnetz automatisch abgearbeitet (recoveryQueueTick()).
-#define RECOVERY_QUEUE_PATH "/recovery_queue.txt"
-#define RECOVERY_QUEUE_MAX  10
-#define RECOVERY_RETRY_MS   60000     // sporadische Pruefung, ob wieder (echtes) Internet da ist
-#define RECOVERY_DRAIN_GAP_MS 5000    // Abstand zwischen zwei automatischen Sendungen (keine Sperre riskieren)
+// RECOVERY_QUEUE_PATH/MAX/RETRY_MS/DRAIN_GAP_MS -- siehe settings.h
 
 static int recoveryCount() {
   if (!sdReady) return 0;
@@ -6331,18 +6249,7 @@ static int queueOrSendRecovery(const char *serial, double lat, double lon, float
 // Empfangsstationen irgendwann aufgefallen -- lieber gar keine Sondenposition hochladen, als eine, die nicht
 // zuverlaessig zum angegebenen Zeitpunkt passt.
 // Braucht echtes Internet (Heimnetz, wifiMode 1).
-#define SONDEHUB_LISTENER_URL       "https://api.v2.sondehub.org/listeners"
-#define SONDEHUB_LISTENER_CHECK_MS    30000UL     // Bewegung wird alle 30 s geprueft (Marks Vorschlag fuer eine mobile Station)
-                                                   // -- bei Bewegung wird auch in diesem Takt als mobile:true gesendet
-#define SONDEHUB_LISTENER_STATIC_RETRY_MS 900000UL      // im Stand seltener (alle 15 min) als mobile:false -- bewusst NICHT
-                                                         // die bei auto_rx uebliche fixe Station mit Stunden-Takt, weil das
-                                                         // T-Deck nie stundenlang durchlaeuft, sondern pro Einsatz ein- und
-                                                         // wieder ausgeschaltet wird; Mark moechte nur keinen staendig
-                                                         // "fahrenden" Chase-Car-Marker von einer eigentlich stehenden
-                                                         // Station sehen, nicht dass sie ganz verschwindet
-#define SONDEHUB_MOVE_THRESHOLD_M    25.0         // ab dieser Distanz (je Pruefung) gilt die Station als "bewegt" -- GPS-
-                                                   // Jitter im Stand liegt beim T-Deck-GPS-Modul typ. deutlich darunter
-#define SONDEHUB_ANTENNA            "Comet SMA-24/tuned T-Deck Antenna"   // echte Antenne statt nur Geraetename
+// SONDEHUB_LISTENER_URL/CHECK_MS/STATIC_RETRY_MS, SONDEHUB_MOVE_THRESHOLD_M, SONDEHUB_ANTENNA -- siehe settings.h
 
 // sondehubMode selbst steht ganz oben bei den anderen Einstellungs-Variablen (vor loadSettings()).
 static uint32_t sondehubListenerNextMs = 0;        // naechste Bewegungspruefung (alle 30 s)
@@ -7471,7 +7378,7 @@ static void runMenu(int startSel = 0) {
         char m[40];
         bool ok = takeScreenshot(true, m, sizeof(m));
         snprintf(menuNote, sizeof(menuNote), ok ? "Foto: %s" : "Foto fehlgeschlagen: %s", m);
-        menuNoteUntil = millis() + 2500;
+        menuNoteUntil = millis() + MENU_NOTE_MS;
         found = true;
       }
       if (c == 'f' && sel == MI_FREQ) {              // schon auf F: zweites F uebernimmt die letzte Sondenfrequenz
@@ -7485,7 +7392,7 @@ static void runMenu(int startSel = 0) {
         } else {
           snprintf(menuNote, sizeof(menuNote), "noch keine Sonde empfangen");
         }
-        menuNoteUntil = millis() + 2500;
+        menuNoteUntil = millis() + MENU_NOTE_MS;
         found = true;
       }
       for (int i = 0; i < MI_COUNT && !found; i++)
@@ -7565,7 +7472,7 @@ static void toastFor(const char *name, const char *val, uint32_t ms) {
 }
 
 static void toast(const char *name, const char *val) {
-  toastFor(name, val, 1800);
+  toastFor(name, val, TOAST_MS_DEFAULT);
 }
 
 static void toastTick() {
@@ -7632,7 +7539,7 @@ static void aprsSymbolTick();   // weiter unten definiert, direkt vor aprsBeacon
 static bool aprsSendBeacon();   // weiter unten definiert, vor aprsBeaconTick() -- fuer den Sofort-Versand per
                                  // Trackballklick in handleInput() (unabhaengig vom Takt in aprsBeaconTick())
 
-#define TBLOCK_DOUBLE_TAP_MS 2000UL   // Zeitfenster fuer den schnellen zweiten Tipp auf Taste 0 (an -> an+Tastatur)
+// TBLOCK_DOUBLE_TAP_MS -- siehe settings.h
 
 // Eingaben in den normalen Ansichten: Enter = Menue, Space/Klick = Ansicht wechseln,
 // Buchstaben = Menue mit gewaehltem Punkt; in der Karte: A/D = Zoom, Trackball = scrollen, R = automatisch
@@ -7744,9 +7651,9 @@ static void handleInput() {
       double lat, lon;
       if (homePosition(lat, lon) && gpsFixGoodEnoughToSend()) {
         aprsSendBeacon();
-        toastFor("LoRa", "Position gesendet", 5000);           // 5 s statt der ueblichen 1,8 s, siehe toastFor() --
+        toastFor("LoRa", "Position gesendet", TOAST_MS_LONG);   // laenger als ueblich, siehe toastFor()/settings.h --
       } else {                                                 // beim Fahren/Laufen bleibt sonst kaum Zeit zum Lesen
-        toastFor("LoRa", "nicht gesendet (kein GPS-Fix)", 5000);
+        toastFor("LoRa", "nicht gesendet (kein GPS-Fix)", TOAST_MS_LONG);
       }
     } else {
       cycleView();
@@ -8528,20 +8435,13 @@ static bool aprsSendBeacon() {
 // kommen die Positionen jetzt spuerbar oefter, ohne die auf einem gemeinsamen RF-/LoRa-Kanal uebliche
 // Untergrenze von ca. 1 Beacon/Minute zu unterschreiten -- FAST (>50 km/h, alle 30 s) und SLOW/Stand
 // (alle 30 min) bleiben unveraendert, die sind schon an dieser Untergrenze bzw. bewusst selten.
-#define APRS_BEACON_SLOW_MS   (30UL * 60UL * 1000UL)   // Stand/langsam (<=10 km/h): alle 30 min
-#define APRS_BEACON_MED_MS    (1UL * 60UL * 1000UL)    // >10 km/h: alle 1 min
-#define APRS_BEACON_FAST_MS   (30UL * 1000UL)          // >50 km/h: alle 30 s
-#define APRS_BEACON_DIST_WALK_M  100.0                 // <=10 km/h (zu Fuss): zusaetzlich sofort nach 100 m Wegstrecke
-#define APRS_BEACON_DIST_FAST_M 500.0                  // >10 km/h: zusaetzlich sofort nach 500 m Wegstrecke
-#define APRS_BEACON_RETRY_MS   (5UL * 1000UL)           // siehe aprsBeaconTick(): Fix bei Faelligkeit nicht gut
-                                                          // genug -- bald wieder versuchen statt ein volles
-                                                          // Intervall (im Stand 30 min!) zu verschenken
+// APRS_BEACON_SLOW_MS/MED_MS/FAST_MS/DIST_WALK_M/DIST_FAST_M/RETRY_MS -- siehe settings.h
 
 // Automatische Wahl des APRS-Symbols nach Tempo (siehe aprsSymbolChars[]/aprsSymbolNames[]/aprsSymbolMinKmh[] oben):
 // die hoechste Stufe, deren Schwelle das aktuelle Tempo erreicht, ist die Zielstufe. Umgeschaltet wird aber erst,
 // wenn diese Zielstufe APRS_SYMBOL_HYST_MS lang ununterbrochen anliegt -- sonst wuerde z. B. an einer Ampel
 // (kurz abgebremst von Bus- auf Fussgaenger-Tempo) staendig das Symbol hin- und herspringen.
-#define APRS_SYMBOL_HYST_MS (1UL * 60UL * 1000UL)   // 1 Minute (vorher 2)
+// APRS_SYMBOL_HYST_MS -- siehe settings.h
 static void aprsSymbolTick() {
   float v = effSpeedKmh();
   uint8_t target = 0;
@@ -8658,14 +8558,14 @@ bool trackSonde(float fMHz) {
         snprintf(m, sizeof(m), "Fremde Sonde %s bei %.3f MHz ignoriert (Filter %s)", sid, fMHz, filterId);
         logLine(m);
         foreignF = fMHz;
-        foreignUntil = millis() + 90000UL;
+        foreignUntil = millis() + FILTER_FOREIGN_BLOCK_MS;
         return false;                             // zum naechsten Kandidaten
       }
       if (stOk) {
         okF = fMHz;                               // Filter-ID bestaetigt
         unkCount = 0;
       } else if (!(okF > 0 && fabsf(fMHz - okF) < 0.03f)) {  // ID nicht lesbar und Frequenz nicht bestaetigt
-        if (++unkCount >= 8) { foreignF = fMHz; foreignUntil = millis() + 30000UL; return false; }
+        if (++unkCount >= FILTER_UNKNOWN_RETRY_N) { foreignF = fMHz; foreignUntil = millis() + FILTER_FOREIGN_BLOCK_UNK_MS; return false; }
         continue;                                 // Frame verwerfen, weiter lauschen
       }
     }
@@ -8914,7 +8814,7 @@ bool trackSonde(float fMHz) {
 // vom Compiler automatisch bei jedem Build gesetzt -- so sieht man am Geraet, welcher Stand gerade laeuft,
 // ohne den Sketch oeffnen zu muessen) gross und zentriert auf dem Display, bevor der normale Boot-Status
 // (Radio/SD/GPS usw.) darunter durchlaeuft. Reine Information, keine Eingabe moeglich, blockiert kurz.
-#define BOOT_SPLASH_MS 2500
+// BOOT_SPLASH_MS -- siehe settings.h
 static void bootCenter(Adafruit_GFX *g, const char *s, int y, uint16_t color, int size, bool bold) {
   g->setTextSize(size);
   int16_t x1, y1; uint16_t w, h;
