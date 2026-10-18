@@ -495,6 +495,13 @@
 //    Zwei bisher nur als Zahl im Code stehende Rueckmeldungs-Timings sind dabei neu benannt worden:
 //    TOAST_MS_DEFAULT/TOAST_MS_LONG (siehe toastFor()) und MENU_NOTE_MS. settings.h muss im selben Ordner
 //    liegen wie dieses .ino (eigener Tab in der Arduino-IDE) -- ohne sie compiliert der Sketch nicht mehr.
+//  - Fix v4.85: Trackball-Sperre Stufe 1 ("nur Rollkugel", Menue R) griff faelschlich auch im Einstellungsmenue
+//    und verhinderte dort die Navigation per Trackball hoch/runter -- Ursache: pollInput() entscheidet die
+//    Stufe-1-Sperre anhand von mapMode/gfxView=="Kartenansicht", diese beiden aendern sich aber beim Oeffnen
+//    des Menues (Enter) gar nicht, weil runMenu() nur ein Overlay ueber die bisherige Ansicht zeichnet. Fix:
+//    neues globales Flag menuOpen (true waehrend runMenu() laeuft), das pollInput() jetzt zusaetzlich abfragt
+//    und die Stufe-1-Sperre im Menue damit aussen vor laesst. Stufe 2 ("+Tastatur", sperrt ohnehin ueberall)
+//    ist unveraendert.
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -631,7 +638,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.84"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.85"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -736,6 +743,11 @@ static uint8_t tbLockMode = 0;          // Trackball-Sperre (Menue R, gegen Vibr
                                          // einzige Moeglichkeit, aus Stufe 2 wieder herauszukommen)
 static uint32_t tbLock1SetMs = 0;       // Zeitpunkt, seit dem Taste 0 zuletzt auf Stufe 1 ("an") gewechselt hat --
                                          // fuer den Schnell-Doppeltipp aus/an/an+Tastatur in handleInput(), siehe dort
+static bool menuOpen = false;           // true waehrend runMenu() laeuft (Fix v4.85): mapMode/gfxView aendern sich
+                                         // beim Oeffnen des Menues NICHT (nur Overlay ueber der bisherigen Ansicht),
+                                         // daher braucht pollInput() dieses eigene Flag, um Trackball-Sperre Stufe 1
+                                         // ("nur Rollkugel", siehe unten) im Menue auszunehmen -- sonst verwirft sie
+                                         // dort faelschlich auch die Trackball-Impulse fuer die Menuenavigation.
 static uint8_t brightPct = 100;         // Displayhelligkeit in Prozent, 10..100 (nie ganz aus)
 static uint8_t kbMode = 2;              // Tastenlicht: 0 aus, 1 bei Tastendruck, 2 bei Tastendruck nur wenn es dunkel ist
 static bool kbLit = false;              // Tastenlicht ist gerade an (Modus 2: auch im gedimmten Zustand true)
@@ -4246,7 +4258,7 @@ static int pollInput() {
   // hinderlich (dort gibt es kein versehentliches Verschieben durch Stoesse, nur die gewollte Navigation).
   // Stufe 2 ("+Tastatur") sperrt dagegen ueberall (siehe handleInput()), weil sie als vollstaendige Sperre
   // gegen jede versehentliche Bedienung gedacht ist, nicht nur gegen Vibration auf der Karte.
-  bool tbLockHere = (tbLockMode >= 2) || (tbLockMode == 1 && mapMode && gfxView == 0);
+  bool tbLockHere = (tbLockMode >= 2) || (tbLockMode == 1 && mapMode && gfxView == 0 && !menuOpen);
   if (tbLockHere) { u = d = l = r = 0; }                 // Impulse verwerfen
   if (u || d || l || r) {   // nur loggen, wenn der Trackball sich gerade bewegt -- sonst flutet das Log
     Serial.printf("PAN Impuls: u%d d%d l%d r%d, Abfrageluecke %lu ms\n", u, d, l, r, (unsigned long)gap);
@@ -7329,6 +7341,8 @@ static void runMenu(int startSel = 0) {
   int sel = startSel;
   editing = false;
   editLen = 0;
+  menuOpen = true;           // Fix v4.85: siehe Deklaration/Kommentar bei tbLockMode -- haelt Trackball-Sperre
+                              // Stufe 1 waehrend des Menues aussen vor
   drawMenu(sel);
   bool done = false;
   while (!done) {
@@ -7402,6 +7416,7 @@ static void runMenu(int startSel = 0) {
     if (redraw) drawMenu(sel);
   }
   editing = false;
+  menuOpen = false;
   showView();
 }
 

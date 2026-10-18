@@ -1,5 +1,6 @@
 # Persoenliche Einstellungen (Rufzeichen, Heimat-Koordinaten) -- siehe config.h.example
 config.h
+T-Deck_RS41_Bedienungsanleitung.docx
 
 # Arduino / build artifacts
 build/
