@@ -390,6 +390,95 @@
 //    Auswahl ohne vorherigen Klick fiel "R" stattdessen auf den allgemeinen Tastenkuerzel-Fallback durch
 //    und oeffnete ungewollt das Konfigurationsmenue. Die Popup-Bedingung war ueberfluessig, "R" fokussiert
 //    jetzt jede markierte Station unabhaengig vom Popup-Zustand.
+//  - Hardware-Watchdog eingebaut (WDT_TIMEOUT_S = 20 s): nach einem beobachteten Komplett-Haenger beim
+//    Radfahren (Anzeige UND Log standen minutenlang, nur ein manueller Neustart half -- vermutlich ein
+//    festsitzender I2C-/SD-Kartenzugriff, vgl. die aeltere Haenger-Diagnose vom 13.10. bei PIN_POWER_ON)
+//    startet das Geraet jetzt automatisch neu, wenn die Hauptschleife zu lange nicht mehr reagiert, statt
+//    unbegrenzt schwarz zu bleiben. Alle Benutzer-Warteschleifen (Menue, Texteingabe, Fundmeldung,
+//    Hilfeseite, J/N-Abfrage) melden sich selbst zurueck, ein echter ArduinoOTA-Upload ebenso (siehe
+//    otaStart()) -- keine davon loest also faelschlich einen Reset aus. Ein Watchdog-Neustart wird beim
+//    naechsten Boot im Log von einem gewoehnlichen Neustart unterschieden.
+//  - Trackball-Sperre (Menue R) aufgeteilt: Stufe 1 ("nur Rollkugel", gegen Vibration/Stoesse) wirkt jetzt
+//    NUR noch in der Kartenansicht -- in der Stationsliste/Hoehentrack, im GPS-Radar oder im Menue laesst
+//    sie den Trackball unangetastet, statt dort nur die Navigation zu blockieren. Stufe 2 ("+Tastatur")
+//    sperrt weiterhin ausnahmslos alles, ueberall.
+//  - GPX-Track/eigene Spur ueberlebt jetzt einen kurzen Neustart (Watchdog, Reset, manuelles Aus-Anschalten):
+//    liegt die letzte Aufzeichnung hoechstens GPX_RESUME_GRACE_S (5 Minuten) zurueck, wird beim naechsten
+//    Start derselbe Track fortgesetzt statt ein neuer angelegt (neues <trkseg> in derselben Datei), und die
+//    letzten Punkte der eigenen Spur werden aus genau dieser Datei zurueck in den RAM-Puffer geladen
+//    (gpxReloadOwnTrailTail()), damit die lila Spur auf der Karte nicht wieder bei null anfaengt.
+//  - Bewegungsmodus (Stationaer/Fussgaenger/Fahrrad/Bus) in der Grossanzeige (drawBigOwnStatus(), schneller als
+//    OWN_SPEED_BIG_KMH, also fast immer waehrend der Fahrt) jetzt als kleines Icon statt als Klartext: der Name
+//    stand bisher nur in kontrastarmer Kleinschrift unten links und war beim Fahren/Radfahren praktisch nicht
+//    zu lesen (Rueckmeldung: eine Autofahrt wurde dadurch fuer einen Haenger gehalten, weil nicht zu erkennen
+//    war, dass dort lediglich "Fahrrad" plus das aktuelle Tempo stand). Neue drawTravelIcon() zeichnet je nach
+//    aprsSymbolIdx ein auf einen Blick unterscheidbares Symbol (Punkt/Strichmaennchen/Fahrrad/Bus, aus
+//    GFX-Grundformen, keine Bitmaps im Projekt) gut sichtbar zwischen Tempo- und Hoehenanzeige.
+//  - Hardware-Watchdog (v4.74) wieder ausgebaut: fuehrte zu einer Bootloop, wenn die J/N-Abfrage
+//    (confirmLoraTxResume(), "LoRa senden war aktiv. Wieder an?") nicht schnell genug bestaetigt wurde --
+//    vermutlich, weil Radio-/SD-/PSRAM-Init davor schon einen Teil der WDT_TIMEOUT_S-Budgets aufgebraucht
+//    hatte, sodass am J/N-Bildschirm kaum noch Reaktionszeit blieb, bevor der naechste Watchdog-Neustart kam.
+//    In der Bootloop liess sich wegen des wiederholten Neustarts auch kein WLAN/Log mehr erreichen, um das
+//    naeher zu untersuchen. Statt den Watchdog nur anders zu dosieren (weitere esp_task_wdt_reset()-Stellen
+//    im setup(), laengeres Timeout), erst einmal komplett zurueckgebaut, bis das urspruengliche Haenger-
+//    Symptom (vgl. v4.74-Eintrag oben) genauer eingegrenzt ist -- die Komplett-Blockade bleibt dann wieder
+//    unbegrenzt schwarz/eingefroren statt automatisch neu zu starten, aber das ist der kleinere Schaden
+//    gegenueber einer Bootloop, aus der man das Geraet nicht mehr per WLAN erreichen kann. esp_system.h
+//    bleibt eingebunden (esp_reset_reason() wird an anderer Stelle schon laenger genutzt), die reine
+//    Reset-Grund-Diagnose beim Start (ohne Watchdog-Ursache jetzt nur noch fuer harte interne Resets/Panics
+//    relevant) bleibt ebenfalls erhalten.
+//  - GPS-Sprungfilter verschaerft (gpsFilterFix()): GPS_FILTER_MAX_HDOP 5.0 -> 3.5, GPS_FILTER_MIN_SATS 4 -> 5.
+//    Log vom 17.10. zeigte im Stand ein "Wandern" mit scheinbar ~40 km/h -- Ursache war eine Kette bestaetigter,
+//    aber geometrisch schwacher Spruenge (durchgehend nur 4-5 genutzte Satelliten, HDOP 4.8-5.5), von denen
+//    einer die bisherige Schwelle gerade noch erreichte und uebernommen wurde. Mit den neuen, strengeren Werten
+//    waere dieser Fix abgelehnt worden. Nebenwirkung: bei echter, schneller Bewegung aus schwachem Empfang
+//    heraus (z. B. kurz nach einem Tunnel) kann die Spur jetzt minimal traeger nachziehen, bis ein Fix mit
+//    5+ Satelliten und HDOP <= 3.5 den Sprung bestaetigt.
+//  - Menue-Bedienung ueberarbeitet: Funkmodus (MI_ID, Sondenempfang/LoRa-APRS) ist jetzt der ERSTE Menuepunkt
+//    (Enum umsortiert, menuKey[]/menuName[] mitgezogen) statt irgendwo in der Mitte zu stehen -- am Geraet
+//    (auch als Vorauswahl, wenn Enter das Menue oeffnet) genauso wie auf der Weboberflaeche. Trackball im
+//    Menue (runMenu()) bewegt jetzt nur noch die Auswahl (hoch/runter = voriger/naechster Menuepunkt, links/
+//    rechts tut nichts mehr) statt wie bisher den Wert des gewaehlten Punkts zu verstellen. Zahlenwerte
+//    aendert man stattdessen mit O (runter) / P (hoch) -- nur wirksam, wenn der gewaehlte Punkt eine Zahl
+//    ist, sonst bleiben O/P wie gehabt der Direktsprung zu "Eigener Track" bzw. "SD-Log" -- oder weiterhin
+//    per Zifferndirekteingabe. Leertaste/Klick aendern wie bisher den Wert des aktuellen Punkts.
+//  - Weboberflaeche (/menu): Bedienknoepfe (Ansicht wechseln, Zentrieren/Fokus, neu "LoRa senden"/SondeHub-
+//    Upload als dritter Knopf) stehen jetzt ganz oben auf der Seite statt unter Bild/Stationsliste. Die
+//    LoRa-APRS-Stationsliste ist jetzt klickbar: oeffnet ein Popup mit Rufzeichen, km/Pegel/SNR und derselben
+//    Zusatzinfo (aprsComment[]) wie am Geraet (neues Feld "txt" in webAltStat()), mit einem Schliessen- und
+//    einem Zentrieren-Knopf (/vstatfocus?i=.., exakt dieselbe Fokus-Logik wie Taste "R" in der Geraete-Liste).
+//  - Korrektur v4.78: der dritte Bedienknopf oben auf /menu war "LoRa senden"/SondeHub-Upload AN/AUS (MI_SHUB)
+//    -- gemeint war aber "eigene Position JETZT senden" (wie ein Trackballklick im LoRa-Modus bei eingeschaltetem
+//    Beacon). Neue webViewSendPos()/Endpunkt /vsendpos sendet die Position sofort per aprsSendBeacon(), wenn
+//    LoRa-Beacon an und ein brauchbarer GPS-Fix da ist -- sonst nur eine Logzeile, kein LoRa-An/Aus mehr ueber
+//    diesen Knopf (das bleibt weiterhin in der Menuetabelle weiter unten erreichbar).
+//  - Fix v4.80: Compile-Fehler ("expected ')' before ';' token") aus v4.79 behoben -- in webMenu() fehlte beim
+//    grossen server.sendContent(String("..."+...+"...")-Aufruf fuer den oberen Seitenbereich (Bedienknoepfe,
+//    Stationspopup-Markup, Bild/Hoehentrack, Men&uuml;-Script) eine der beiden schliessenden Klammern (String(
+//    und sendContent( wurden geoeffnet, aber nur einmal wieder geschlossen). Keine Verhaltensaenderung, nur
+//    die fehlende Klammer vor dem "<h2>Men&uuml;</h2><table>");" ergaenzt. Die gesamte Datei wurde danach mit
+//    einem klammer-/anfuehrungszeichen-bewussten Scanner auf durchgaengige Balance geprueft (0 unpassende
+//    Klammern), um weitere Stellen aus v4.75-v4.79 auszuschliessen.
+//  - Fix v4.81: zweiter Compile-Fehler ("'aprsSendBeacon' was not declared in this scope") behoben -- die neue
+//    webViewSendPos() (v4.79) ruft aprsSendBeacon() auf, steht in der Datei aber VOR der bisher einzigen
+//    Vorwaertsdeklaration (static bool aprsSendBeacon();, direkt vor handleInput(), urspruenglich nur fuer den
+//    Trackballklick gedacht). Fix: dieselbe Vorwaertsdeklaration zusaetzlich direkt vor webViewStatFocus()/
+//    webViewSendPos() ergaenzt (eine doppelte Vorwaertsdeklaration derselben Funktion ist in C++ erlaubt).
+//    Keine Verhaltensaenderung.
+//  - Weboberflaeche (/menu): der "Eigene Position senden"-Knopf gibt jetzt eine kurze Rueckmeldung auf der
+//    Seite selbst, statt nur stumm weiterzuleiten. webViewSendPos() haengt dazu einen kurzen Ergebniscode an
+//    den Redirect an (/menu?pm=sent|nofix|off, keine Freitext-URL -- vermeidet Escaping-Aerger), und webMenu()
+//    zeigt direkt unter den Bedienknoepfen je nach Code eine farbige Zeile: gruen "Eigene Position wurde
+//    gesendet.", orange "Position NICHT gesendet: kein brauchbarer GPS-Fix." bzw. "...LoRa-Beacon ist aus oder
+//    nicht im LoRa-Modus." -- dieselben drei Faelle, die bisher nur in der Logzeile (SD/Weboberflaeche "Log")
+//    sichtbar waren.
+//  - Trackballklick "Position senden" (handleInput(), radioMode==1 && loraTxOn): zeigt jetzt genauso eine
+//    Rueckmeldung am Geraet wie der neue Website-Knopf -- bisher gab es schon einen kurzen Toast ("LoRa:
+//    Position gesendet" bzw. "LoRa: kein brauchbarer GPS-Fix"), aber nur fuer die ueblichen 1,8 s. Neue
+//    toastFor(name, val, ms) (Kopie von toast() mit frei waehlbarer Anzeigedauer statt der festen 1800 ms;
+//    toast() selbst ruft jetzt nur noch toastFor(..., 1800) auf, keine Verhaltensaenderung fuer alle anderen
+//    Toasts) -- hier mit 5000 ms, weil die Meldung sonst waehrend der Fahrt/des Laufens kaum zu lesen ist, und
+//    verschwindet danach automatisch wieder (toastTick() loescht sie wie jeden anderen Toast nach Ablauf).
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -456,11 +545,21 @@ static void gpxCloseTrack(GpxTrack &t);
 static void gpxQueue(GpxTrack &t, GpxPoint *buf, int &count, const char *idStr, const char *trkName, double lat, double lon, float alt);
 static void gpxDrain(GpxTrack &t, GpxPoint *buf, int &count, const char *idStr, const char *trkName);
 static bool gpxEnsureIchId();
+static void gpxReloadOwnTrailTail();    // weiter unten definiert (braucht trkptParse()), siehe gpxEnsureIchId()
+static void gpxPersistResumeInfo();     // weiter unten definiert, siehe gpsLogTick()/doShutdown()
 static GpxTrack gpxIch, gpxSonde;   // muss hier stehen: die Arduino-IDE hebt nur Funktions-, keine Variablendeklarationen nach oben
 static char gpxSondeId[12] = "";        // ID, unter der die aktuell offene(n)/gepufferten Sonde-Punkte abgelegt werden
 static char gpxIchId[20] = "";          // Datum+Uhrzeit (JJJJ-MM-TT_hhmmss), unter dem die "Ich"-Punkte dieser Sitzung abgelegt werden
 static char gpxSondeName[24] = "?";      // <name> im GPX-Track: die Sonden-ID, sobald sie bekannt ist
 static char gpxIchName[40] = "?";        // <name> im GPX-Track: Startdatum/-uhrzeit dieser Sitzung
+// Kurzer-Neustart-Erkennung (Watchdog/Reset/manueller Neustart, siehe gpxEnsureIchId()): letzter bekannter
+// "Ich"-Track (idStr/Name) + Zeitstempel, in den Settings (NVS) gesichert, damit sie einen Reboot ueberleben
+// (anders als gpxIchId/gpxIchName oben, die bei jedem Start leer anfangen). Liegt der Neustart hoechstens
+// GPX_RESUME_GRACE_S zurueck, wird dieselbe Datei/derselbe Track fortgesetzt statt ein neuer angelegt.
+#define GPX_RESUME_GRACE_S  300  // 5 Minuten Karenzzeit (Wunsch Okt. 2026)
+static char gpxResumeId[20] = "";
+static char gpxResumeName[40] = "";
+static uint32_t gpxResumeTs = 0;        // Unixzeit (time(nullptr)) der letzten Sicherung, 0 = keine vorhanden
 static char gpxRecoveredBy[40] = "";    // Melder-Name/Rufzeichen fuer SondeHub-Fundmeldungen (Taste Q), hier weil schon loadSettings() darauf zugreift
 #define GPX_BUF_CAP  300         // PSRAM-Zwischenspeicher je Spur (Punkte), bevor spaetestens auf die SD geschrieben wird
 static GpxPoint *gpxBufIch = nullptr, *gpxBufSonde = nullptr;
@@ -550,7 +649,7 @@ const float BAT_USB_V  = 4.30f;        // ab dieser gemessenen Spannung gilt USB
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.73"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.83"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -1471,13 +1570,19 @@ static const uint32_t GPS_GLITCH_TIMEOUT_MS = 120000UL;  // nach 2 Min. auch unb
 // Satellitengeometrie-Schranke fuer die "Sprung vom naechsten Fix bestaetigt"-Uebernahme (siehe gpsFilterFix()):
 // etwas grosszuegiger als GPS_SEND_MAX_HDOP (das Senden soll strenger sein als die reine Spuranzeige), aber
 // streng genug, um eine mehrsekuendige, korrelierte Mehrwege-Drift (die sich sonst selbst "bestaetigt") abzuwehren.
-static const float GPS_FILTER_MAX_HDOP = 5.0f;
+// NACHTRAEGLICH verschaerft (vorher 5.0): ein Log vom 17.10. zeigte im Stand eine Kette aus "Sprung ... m
+// bestaetigt, aber Geometrie zu schlecht" (4 Sat, HDOP 4.8..5.5) ueber mehrere Sekunden, bis ein Fix mit
+// knapp 5 Sat/HDOP 4.8 -- also immer noch schwacher Geometrie -- den angesammelten ~680-m-Sprung doch noch
+// durchliess (wirkte dann wie ein Wandern mit ~40 km/h im Stand). 5.0 war dafuer offenbar zu durchlaessig.
+static const float GPS_FILTER_MAX_HDOP = 3.5f;
 // Mindest-Satellitenzahl fuer dieselbe Uebernahme -- NACHTRAEGLICH ergaenzt: ein Log zeigte mehrere ueber
 // mehrere Sekunden "bestaetigte" Spruenge von 500 m bis ueber 12 km, alle mit nur 3 Satelliten. Mit 3 Satelliten
 // ist nicht mal ein reguaerer 3D-Fix moeglich (x/y/z + Uhrfehler braucht 4) -- der gemeldete HDOP ist dann
 // mathematisch kaum noch aussagekraeftig und kann trotzdem klein wirken, obwohl die Position frei "schwimmt".
-// Ohne diese zusaetzliche Schranke konnte die HDOP-Pruefung allein genau diese Faelle nicht abfangen.
-static const int GPS_FILTER_MIN_SATS = 4;
+// Ohne diese zusaetzliche Schranke konnte die HDOP-Pruefung allein genau diese Faelle nicht abfangen. Mit dem
+// 17.10.-Log (s. o., durchgehend nur 4-5 genutzte Satelliten in der betroffenen Phase) ebenfalls auf 5 angehoben,
+// sonst haette schon ein knapper 4-Sat-Fix wieder gereicht.
+static const int GPS_FILTER_MIN_SATS = 5;
 
 static bool ownFiltValid = false;                    // letzte akzeptierte (gefilterte) Position
 static double ownFiltLat = 0, ownFiltLon = 0;
@@ -1824,6 +1929,15 @@ static void gpsLogTick() {
     homeDirty = false;
     prefs.putDouble("hlat", homeLat);
     prefs.putDouble("hlon", homeLon);
+  }
+  // Eigener, von homeDirty UNABHAENGIGER 2-Minuten-Takt (siehe GPX_RESUME_GRACE_S/gpxEnsureIchId()): wuerde
+  // sich dieser Zeitstempel nur bei Bewegung (homeDirty) aktualisieren, bliebe er im Stand (z. B. an einer
+  // Ampel/Pause) stehen -- ein Haenger kurz danach wuerde dann faelschlich als "zu lange her" gelten, obwohl
+  // die Karenzzeit eigentlich noch reichen wuerde.
+  static uint32_t lastGpxResumeSave = 0;
+  if (now - lastGpxResumeSave > 120000UL) {
+    lastGpxResumeSave = now;
+    gpxPersistResumeInfo();
   }
 }
 
@@ -2224,10 +2338,24 @@ static void gpxSafeId(const char *id, char *out, size_t n) {
 // Setzt gpxIchId einmalig auf das aktuelle Datum, sobald die Uhr (per GPS) beim Einschalten erstmals steht.
 // Vorher liefert die Funktion false, und es werden noch keine "Ich"-Punkte aufgezeichnet (der Dateiname
 // braucht das Datum). Bleibt fuer den Rest der Betriebszeit unveraendert, auch falls es ueber Mitternacht geht.
+// Kurzer Neustart (Watchdog/Reset/manuelles Aus-Anschalten, siehe GPX_RESUME_GRACE_S oben): liegt die letzte
+// gesicherte "Ich"-Aufzeichnung hoechstens GPX_RESUME_GRACE_S zurueck, wird statt eines neuen Tracks derselbe
+// idStr (= dieselbe Datei) wiederverwendet -- gpxOpenSegment() haengt dann nur ein neues <trkseg> an die
+// bestehende Datei an, statt eine neue anzulegen. Wunsch Okt. 2026, nach einem beobachteten Haenger samt
+// manuellem Neustart mittendrin auf einer Radtour.
 static bool gpxEnsureIchId() {
   if (gpxIchId[0]) return true;
   if (!timeSet) return false;
   time_t t = time(nullptr);
+  if (gpxResumeId[0] && gpxResumeTs > 0 && t >= (time_t)gpxResumeTs && (uint32_t)(t - gpxResumeTs) <= GPX_RESUME_GRACE_S) {
+    strncpy(gpxIchId, gpxResumeId, sizeof(gpxIchId) - 1); gpxIchId[sizeof(gpxIchId) - 1] = 0;
+    strncpy(gpxIchName, gpxResumeName, sizeof(gpxIchName) - 1); gpxIchName[sizeof(gpxIchName) - 1] = 0;
+    char m[96];
+    snprintf(m, sizeof(m), "GPX: Track %s fortgesetzt (Neustart %lu s zuvor)", gpxIchId, (unsigned long)(t - gpxResumeTs));
+    logLine(m);
+    gpxReloadOwnTrailTail();          // letzte Punkte zurueck in ownLat[]/ownLon[], siehe dort
+    return true;
+  }
   struct tm tmv;
   localtime_r(&t, &tmv);
   snprintf(gpxIchId, sizeof(gpxIchId), "%04d-%02d-%02d_%02d%02d%02d", tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
@@ -2235,6 +2363,16 @@ static bool gpxEnsureIchId() {
   snprintf(gpxIchName, sizeof(gpxIchName), "%04d-%02d-%02d %02d:%02d:%02d", tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
            tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
   return true;
+}
+
+// Aktuellen "Ich"-Track + Zeitstempel in den Settings sichern (siehe GPX_RESUME_GRACE_S oben) -- aufgerufen
+// alle paar Minuten aus gpsLogTick() sowie einmal beim geordneten Herunterfahren (doShutdown()), NICHT bei
+// jedem GPS-Fix (das waere unnoetiger Flash-Verschleiss der NVS-Partition fuer einen reinen Zeitstempel).
+static void gpxPersistResumeInfo() {
+  if (!gpxIchId[0] || !timeSet) return;
+  prefs.putString("gpxrid", gpxIchId);
+  prefs.putString("gpxrnm", gpxIchName);
+  prefs.putULong("gpxrts", (uint32_t)time(nullptr));
 }
 
 static void gpxTimeStr(time_t t, uint16_t ms, char *buf, size_t n) {   // UTC, ISO 8601 (GPX-Pflichtformat); leer, wenn t == 0
@@ -3324,6 +3462,48 @@ static void drawVzArrow(Adafruit_GFX *g, int x, int yc, float vz) {
   else g->fillRect(x, yc - 1, 14, 2, ST77XX_WHITE);
 }
 
+// Bewegungsmodus (Stationaer/Fussgaenger/Fahrrad/Bus, siehe aprsSymbolIdx/aprsSymbolTick()) als kleines Icon statt
+// Text: in der Grossanzeige (drawBigOwnStatus(), also gerade waehrend der Fahrt) war der Klartext-Name in
+// Kleinschrift zu klein/kontrastarm, um ihn im Fahren noch zu lesen (Rueckmeldung: Auto faelschlich als "Fahrrad"
+// wahrgenommen, weil der Name nicht zu erkennen war). Ein auf einen Blick erkennbares Symbol ist schneller lesbar
+// als ein Wort -- eigene Formen aus GFX-Grundelementen, da es im Projekt keine Bitmap-/Sprite-Infrastruktur gibt.
+// Zentriert um (cx, cy), ca. 18x16 Pixel.
+static void drawTravelIcon(Adafruit_GFX *g, int cx, int cy, uint8_t idx) {
+  switch (idx % NSYMBOL) {
+    case 0:   // Stationaer: einfacher Punkt (entspricht dem "/"-APRS-Symbol fuer diesen Zustand)
+      g->fillCircle(cx, cy, 5, 0x8410);
+      break;
+    case 1: {   // Fussgaenger: Strichmaennchen
+      uint16_t col = ST77XX_YELLOW;
+      g->fillCircle(cx, cy - 8, 2, col);
+      g->drawLine(cx, cy - 6, cx, cy + 2, col);
+      g->drawLine(cx, cy + 2, cx - 4, cy + 8, col);
+      g->drawLine(cx, cy + 2, cx + 4, cy + 8, col);
+      g->drawLine(cx, cy - 3, cx + 5, cy - 1, col);          // Arm
+      break;
+    }
+    case 2: {   // Fahrrad: zwei Raeder plus Rahmendreieck
+      uint16_t col = ST77XX_GREEN;
+      g->drawCircle(cx - 7, cy + 5, 5, col);
+      g->drawCircle(cx + 7, cy + 5, 5, col);
+      g->drawLine(cx - 7, cy + 5, cx - 1, cy - 6, col);
+      g->drawLine(cx - 1, cy - 6, cx + 7, cy + 5, col);
+      g->drawLine(cx - 1, cy - 6, cx + 3, cy - 2, col);
+      g->drawLine(cx + 3, cy - 2, cx + 7, cy + 5, col);
+      break;
+    }
+    default: {   // Bus: Kasten mit zwei Fenstern auf zwei Raedern
+      uint16_t col = ST77XX_CYAN;
+      g->fillRoundRect(cx - 9, cy - 7, 18, 11, 2, col);
+      g->fillRect(cx - 7, cy - 5, 5, 4, ST77XX_BLACK);
+      g->fillRect(cx + 1, cy - 5, 5, 4, ST77XX_BLACK);
+      g->fillCircle(cx - 5, cy + 6, 2, ST77XX_WHITE);
+      g->fillCircle(cx + 5, cy + 6, 2, ST77XX_WHITE);
+      break;
+    }
+  }
+}
+
 // Grosse Statuszeile ohne Sondenempfang (schneller als OWN_SPEED_BIG_KMH, aber noch keine Sonde diese Sitzung):
 // nur die eigene Geschwindigkeit und Hoehe, groesser als die sonst dort stehenden Detailzeilen.
 static void drawBigOwnStatus(Adafruit_GFX *g, float speedKmh, float alt) {
@@ -3338,16 +3518,11 @@ static void drawBigOwnStatus(Adafruit_GFX *g, float speedKmh, float alt) {
   g->print(a);
   g->setCursor(170, 213);
   g->print(b);
-  // Welches APRS-Symbol/Fahrzeugkennung der eigene Beacon gerade sendet, war bisher nirgends auf einen
-  // Blick zu erkennen (nur verschluesselt als einzelnes Zeichen im rohen Funkpaket, siehe aprsSendBeacon())
-  // -- gerade in dieser Grossanzeige (ab OWN_SPEED_BIG_KMH, also fast immer bei Rad/Auto) steht es jetzt klein
-  // unten mit dabei.
-  if (radioMode == 1 && loraTxOn) {
-    g->setTextSize(1);
-    g->setTextColor(0x8410);
-    g->setCursor(2, 231);
-    g->print(aprsSymbolNames[aprsSymbolIdx % NSYMBOL]);
-  }
+  // Welches APRS-Symbol/Fahrzeugkennung der eigene Beacon gerade sendet, war bisher nirgends auf einen Blick zu
+  // erkennen (nur verschluesselt als einzelnes Zeichen im rohen Funkpaket, siehe aprsSendBeacon()) -- gerade in
+  // dieser Grossanzeige (ab OWN_SPEED_BIG_KMH, also fast immer bei Rad/Auto) steht es jetzt als Icon zwischen den
+  // beiden Zahlen (statt als Kleinschrift-Text, der im Fahren nicht mehr lesbar war).
+  if (radioMode == 1 && loraTxOn) drawTravelIcon(g, 135, 222, aprsSymbolIdx);
 }
 
 // Grosse Statuszeile mit Sonde (schneller als OWN_SPEED_BIG_KMH): Hoehe, Steig-/Sinkrate (mit Pfeil), Geschwindigkeit
@@ -4143,7 +4318,13 @@ static int pollInput() {
   tbD = 0;
   tbL = 0;
   tbR = 0;
-  if (tbLockMode >= 1) { u = d = l = r = 0; }            // Trackball-Sperre (Stufe 1+): Impulse verwerfen
+  // Trackball-Sperre: Stufe 1 ("nur Rollkugel", gegen Vibration/Stoesse z. B. am Fahrrad) wirkt bewusst NUR
+  // auf die Kartenansicht -- in der Stationsliste/Hoehentrack, im GPS-Radar, im Menue usw. waere sie nur
+  // hinderlich (dort gibt es kein versehentliches Verschieben durch Stoesse, nur die gewollte Navigation).
+  // Stufe 2 ("+Tastatur") sperrt dagegen ueberall (siehe handleInput()), weil sie als vollstaendige Sperre
+  // gegen jede versehentliche Bedienung gedacht ist, nicht nur gegen Vibration auf der Karte.
+  bool tbLockHere = (tbLockMode >= 2) || (tbLockMode == 1 && mapMode && gfxView == 0);
+  if (tbLockHere) { u = d = l = r = 0; }                 // Impulse verwerfen
   if (u || d || l || r) {   // nur loggen, wenn der Trackball sich gerade bewegt -- sonst flutet das Log
     Serial.printf("PAN Impuls: u%d d%d l%d r%d, Abfrageluecke %lu ms\n", u, d, l, r, (unsigned long)gap);
   }
@@ -4219,6 +4400,15 @@ static void loadSettings() {
   if (radioMode == 1 && savedView == 0) savedView = 1;     // LoRa-Modus: Textansicht (Frequenzscan) gibt's nicht -> auf Karte ausweichen
   txPowerDbm = (int8_t)constrain((int)prefs.getChar("txpwr", 10), -9, 22);   // Menue U (LoRa-Beacon-Sendeleistung)
   loraTxWasOn = prefs.getBool("loratx", false);            // siehe confirmLoraTxResume() in setup()
+  {
+    String rid = prefs.getString("gpxrid", "");
+    strncpy(gpxResumeId, rid.c_str(), sizeof(gpxResumeId) - 1);
+    gpxResumeId[sizeof(gpxResumeId) - 1] = 0;
+    String rnm = prefs.getString("gpxrnm", "");
+    strncpy(gpxResumeName, rnm.c_str(), sizeof(gpxResumeName) - 1);
+    gpxResumeName[sizeof(gpxResumeName) - 1] = 0;
+    gpxResumeTs = prefs.getULong("gpxrts", 0);   // siehe gpxEnsureIchId()/GPX_RESUME_GRACE_S
+  }
 }
 
 static void saveSettings() {
@@ -4295,9 +4485,12 @@ static void cycleView() {
 // Zoomstufe gezoomt (effZoom() rundet sowieso), die Schrittweite war also nur noch totes Menue. Taste H (vorher
 // MI_BRIGHT/Helligkeit) zeigt seitdem direkt die Hilfe in der Kartenansicht (siehe showHelpScreen()); Helligkeit
 // ist dafuer auf die frei gewordene Taste Y gewandert.
-enum { MI_SEARCH, MI_FREQ, MI_BW, MI_FIX, MI_ID, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_TXPWR, MI_SHUTDOWN, MI_COUNT };
-static const char menuKey[MI_COUNT] = {'s', 'f', 'b', 'k', 'i', 'v', 'l', 'z', 'g', 'r', 'o', 'x', 'm', 'y', 't', 'j', 'p', 'w', 'e', 'a', 'u', 'q'};
-static const char *const menuName[MI_COUNT] = {"Suche", "Frequenz", "Bandbreite", "Fehlerkorr.", "Funkmodus", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Kartenart", "Helligkeit", "Tastatur", "GPX", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Sendeleistung", "Herunterfahren"};
+// MI_ID (Funkmodus Sondenempfang/LoRa-APRS) bewusst als ERSTER Menuepunkt (siehe Changelog): die wichtigste
+// Weiche -- in welchem Modus das Geraet ueberhaupt arbeitet -- soll ganz oben stehen statt irgendwo in der
+// langen Liste zu verschwinden, am Geraet genauso wie auf der Weboberflaeche (/menu iteriert dieselbe Reihenfolge).
+enum { MI_ID, MI_SEARCH, MI_FREQ, MI_BW, MI_FIX, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_TXPWR, MI_SHUTDOWN, MI_COUNT };
+static const char menuKey[MI_COUNT] = {'i', 's', 'f', 'b', 'k', 'v', 'l', 'z', 'g', 'r', 'o', 'x', 'm', 'y', 't', 'j', 'p', 'w', 'e', 'a', 'u', 'q'};
+static const char *const menuName[MI_COUNT] = {"Funkmodus", "Suche", "Frequenz", "Bandbreite", "Fehlerkorr.", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Kartenart", "Helligkeit", "Tastatur", "GPX", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Sendeleistung", "Herunterfahren"};
 
 // Anzeigename eines Menuepunkts -- wie menuName[], aber MI_SHUB heisst im LoRa-Modus "LoRa Upload" statt
 // "SondeHub-Upload" (siehe menuValue()/menuStep() MI_SHUB: derselbe Menuepunkt ist dort je nach radioMode
@@ -5175,6 +5368,8 @@ static void webMenuSelect();
 static void webLive();
 static void webViewSpace();
 static void webViewFocus();
+static void webViewSendPos();
+static void webViewStatFocus();
 static void webMenuStat();
 static void webAltStat();
 
@@ -5202,6 +5397,8 @@ static void wifiServerStart() {
     server.on("/live.jpg", webLive);
     server.on("/vspace", webViewSpace);
     server.on("/vfocus", webViewFocus);
+    server.on("/vsendpos", webViewSendPos);
+    server.on("/vstatfocus", webViewStatFocus);
     server.on("/mstat", webMenuStat);
     server.on("/malt", webAltStat);
     server.onNotFound(webNotFound);
@@ -5576,6 +5773,50 @@ static bool trkptParse(const char *p, double &lat, double &lon, float &alt) {
   lon = atof(lo + 5);
   alt = el ? (float)atof(el + 5) : 0.0f;
   return true;
+}
+
+// Nach einem kurzen Neustart (siehe gpxEnsureIchId()/GPX_RESUME_GRACE_S): die letzten Punkte des eben
+// wiederaufgenommenen "Ich"-Tracks zurueck in ownLat[]/ownLon[] laden, damit die eigene Spur auf der Karte
+// nicht wieder bei null anfaengt, sondern sofort die letzten KEEP_RECENT_KM zeigt. Liest dafuer nur ein
+// grosszuegiges Stueck vom Dateiende zurueck (WINDOW), kein Komplett-Parsing der womoeglich stundenlangen
+// Datei -- bei ownMinDist (mindestens 10 m zwischen zwei Punkten) passen KEEP_RECENT_KM (5 km) reichlich
+// in dieses Fenster, und ebenso reichlich in OWN_MAX (600 Punkte).
+static void gpxReloadOwnTrailTail() {
+  if (!gpxIchId[0]) return;
+  char path[48];
+  snprintf(path, sizeof(path), "%s/%s.gpx", GPX_DIR, gpxIchId);
+  File f = SD.open(path);
+  if (!f) return;
+  uint32_t sz = f.size();
+  const uint32_t WINDOW = 60000UL;
+  uint32_t back = (sz > WINDOW) ? sz - WINDOW : 0;
+  f.seek(back);
+  uint32_t toRead = sz - back;
+  char *buf = (char *)heap_caps_malloc(toRead + 1, MALLOC_CAP_SPIRAM);   // PSRAM statt internem Heap, siehe setup()
+  if (!buf) { f.close(); return; }
+  int rn = f.read((uint8_t *)buf, toRead);
+  f.close();
+  if (rn <= 0) { free(buf); return; }
+  buf[rn] = 0;
+  ownN = 0;
+  char *p = buf;
+  while ((p = strstr(p, "<trkpt")) != nullptr) {
+    double la, lo; float al;
+    if (trkptParse(p, la, lo, al)) {
+      if (ownN >= OWN_MAX) {                  // sollte dank WINDOW/ownMinDist nicht vorkommen, sicherheitshalber
+        for (int i = 0; i < OWN_MAX / 2; i++) { ownLat[i] = ownLat[2 * i]; ownLon[i] = ownLon[2 * i]; }
+        ownN = OWN_MAX / 2;
+      }
+      ownLat[ownN] = (float)la;
+      ownLon[ownN] = (float)lo;
+      ownN++;
+    }
+    p += 6;    // "<trkpt" selbst ueberspringen, sonst findet strstr() immer wieder dieselbe Stelle
+  }
+  free(buf);
+  char m[72];
+  snprintf(m, sizeof(m), "GPX: %d Punkte der eigenen Spur nach Neustart zurueckgeladen", ownN);
+  logLine(m);
 }
 
 // Fortschrittsanzeige fuer Taste Q -- schreibt direkt aufs Display wie bootSplash()/shutdown(), weil hier
@@ -6258,6 +6499,7 @@ static void recoveryQueueTick() {
 // ---------- Geordnetes Herunterfahren (Menue Q) ----------
 static void doShutdown() {
   logLine("### Geordnetes Herunterfahren");
+  gpxPersistResumeInfo();                          // frischester Zeitstempel fuer die Karenzzeit beim naechsten Start
   gpxDrainAll();                                   // GPX-Zwischenspeicher noch sichern
   if (wifiOn) wifiStopAll();
   radio.standby();
@@ -6692,17 +6934,54 @@ static void webMenu() {
                      ".row>div{flex:1 1 320px;min-width:300px}"
                      "#altc{max-width:100%;background:#111;border:1px solid #444}"
                      "#altlist table{width:auto;font-size:12px}#altlist td,#altlist th{padding:1px 6px;border-bottom:1px solid #444}"
+                     "#altlist tbody tr{cursor:pointer}#altlist tbody tr:hover{background:#222}"
                      "@media (max-width:600px){table,tbody,tr,td{display:block;width:100%}"
                      "tr{margin-bottom:10px;border-bottom:2px solid #555}td{border-bottom:none}}"
+                     // Stationspopup (siehe showStationPopup()/closeStatPopup() unten): wie am Geraet (R/Klick in
+                     // der Stationsliste) Zusatzinfo anzeigen, hier als simples modales Overlay.
+                     "#statpop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10}"
+                     "#statpop .box{background:#111;border:1px solid #6cf;border-radius:6px;max-width:420px;"
+                     "margin:15vh auto;padding:16px}"
                      "</style></head><body>");
   // altTitle/altc richten sich schon beim ersten Ausliefern (nicht erst nachtraeglich per JS, siehe loadAlt())
   // nach dem AKTUELLEN radioMode: im LoRa-Modus sofort "LoRa-APRS-Stationen" + Canvas versteckt (display:none),
   // damit der (dort ungenutzte) Hoehentrack beim Laden nicht einmal kurz aufblitzt, sondern sofort die
   // Stationsliste (#altlist, von loadAlt() befuellt) an seiner Stelle steht. Canvas-Groesse 320x240 = genau
   // die Aufloesung des T-Deck-Displays (loadAlt() liest c.width/c.height dynamisch, skaliert also automatisch mit).
+  // Bedienknoepfe UND Funkmodus jetzt ganz oben auf der Seite (vorher unter dem Bild/der Stationsliste) --
+  // dieselben zwei Dinge, die auch am Geraet zuerst auffallen sollen: WAS gerade bedient werden kann (Ansicht
+  // wechseln, Zentrieren, eigene Position senden) und WELCHER Funkmodus gerade laeuft. Der Funkmodus selbst
+  // steht nicht extra hier, sondern ist einfach der erste Eintrag der Menuetabelle weiter unten (siehe MI_ID,
+  // jetzt Index 0 -- dieselbe Reihenfolge gilt am Geraet).
+  // Kurze Rueckmeldung zum "Eigene Position senden"-Knopf (siehe webViewSendPos(), Redirect auf /menu?pm=...):
+  // Ergebniscode statt Freitext in der URL, Text/Farbe hier einmalig zugeordnet; leer, solange kein pm= in der
+  // URL steht (z. B. beim normalen Aufruf von /menu ohne vorherigen Knopfdruck).
+  String pmNotice = "";
+  if (server.hasArg("pm")) {
+    String pm = server.arg("pm");
+    const char *txt;
+    const char *col;
+    if (pm == "sent") { txt = "Eigene Position wurde gesendet."; col = "#8f8"; }
+    else if (pm == "nofix") { txt = "Position NICHT gesendet: kein brauchbarer GPS-Fix."; col = "#fa0"; }
+    else if (pm == "off") { txt = "Position NICHT gesendet: LoRa-Beacon ist aus oder nicht im LoRa-Modus."; col = "#fa0"; }
+    else { txt = ""; col = "#fa0"; }
+    if (txt[0]) pmNotice = String("<p style=\"color:") + col + ";font-weight:bold\">" + txt + "</p>";
+  }
   server.sendContent(String("<p><a href=\"/\">&larr; Zur Startseite</a></p>"
+                     "<p><a class=b href=\"/vspace\">Ansicht wechseln (Space)</a> "
+                     "<a class=b href=\"/vfocus\">Zentrieren/Fokus (R)</a> "
+                     "<a class=b href=\"/vsendpos\">Eigene Position senden</a></p>") +
+                     pmNotice +
+                     String(
+                     // Stationspopup-Markup (siehe CSS oben/JS unten): leer bis showStationPopup() es befuellt
+                     // und einblendet; Klick auf den abgedunkelten Hintergrund schliesst es ebenfalls.
+                     "<div id=statpop onclick=\"if(event.target==this)closeStatPopup()\">"
+                     "<div class=box><h3 id=spCall></h3><p id=spMeta style=\"color:#888\"></p>"
+                     "<p id=spTxt></p>"
+                     "<p><a class=b href=\"#\" onclick=\"closeStatPopup();return false;\">Schlie&szlig;en</a> "
+                     "<a class=b id=spFocus href=\"#\">Zentrieren</a></p></div></div>"
                      "<div class=row>"
-                     "<div><h2>Aktuelles Bild</h2><p><img id=live src=\"/live.jpg?t=") + String(millis()) +
+                     "<div><h2>Aktuelles Bild</h2><p><img id=live src=\"/live.jpg?t=" + String(millis()) +
                      "\" alt=\"Live-Bild\"></p></div>"
                      "<div><h2 id=altTitle>" + (radioMode == 1 ? "LoRa-APRS-Stationen" : "Hoehentrack") + "</h2>"
                      "<canvas id=altc width=320 height=240" + (radioMode == 1 ? " style=\"display:none\"" : "") + "></canvas>"
@@ -6712,8 +6991,6 @@ static void webMenu() {
                      "<select id=refint onchange=\"setRefresh(this.value)\">"
                      "<option value=0>aus</option><option value=30 selected>alle 30 s</option>"
                      "<option value=60>alle 60 s</option></select></p>"
-                     "<p><a class=b href=\"/vspace\">Ansicht wechseln (Space)</a> "
-                     "<a class=b href=\"/vfocus\">Zentrieren/Fokus (R)</a></p>"
                      // Bewusst echte UTF-8-/reine ASCII-JS ohne HTML-Entities (wirken in <script> nicht, siehe
                      // webIndex()-Kommentar). pollStat() fragt alle 5 s /mstat ab und piept bei Aenderung von
                      // "seq" (= neuer Sondenfund, siehe sondeFoundSeq) ueber die Web Audio API -- unabhaengig
@@ -6721,8 +6998,18 @@ static void webMenu() {
                      // Stationsfeld wie die Geraete-Ansicht (siehe altTrackUpdate()/webAltStat()) und laeuft
                      // im selben Takt wie loadLive() (siehe setRefresh()).
                      "<script>"
-                     "var refTimer=null,lastSeq=null;"
+                     "var refTimer=null,lastSeq=null,lastSt=[];"
                      "function loadLive(){document.getElementById('live').src='/live.jpg?t='+Date.now();}"
+                     // Stationspopup wie am Geraet (Klick/R in der Stationsliste, siehe handleInput()): zeigt
+                     // Rufzeichen, km/Pegel/Alter und die Zusatzinfo (txt, von webAltStat() aus aprsComment[]
+                     // mitgeliefert). lastSt[] haelt die zuletzt geladene Stationsliste fuer den Klick-Handler.
+                     "function showStationPopup(k){var s=lastSt[k];if(!s)return;"
+                     "document.getElementById('spCall').textContent=s.c;"
+                     "document.getElementById('spMeta').textContent=s.km.toFixed(1)+' km, '+s.rssi+' dBm, SNR '+s.snr;"
+                     "document.getElementById('spTxt').textContent=s.txt||'(keine Zusatzinfo)';"
+                     "document.getElementById('spFocus').href='/vstatfocus?i='+s.i;"
+                     "document.getElementById('statpop').style.display='block';}"
+                     "function closeStatPopup(){document.getElementById('statpop').style.display='none';}"
                      "function loadAlt(){fetch('/malt').then(function(r){return r.json();}).then(function(d){"
                      "var c=document.getElementById('altc'),ctx=c.getContext('2d'),"
                      "t=document.getElementById('altTitle'),lst=document.getElementById('altlist');"
@@ -6733,16 +7020,20 @@ static void webMenu() {
                      // wenn ueberhaupt Pakete ankommen, aber keine Station daraus wird (Parameter pruefen).
                      "var h='<p style=\"color:#888\">Pakete: '+(d.rxtot||0)+' ('+(d.rxok||0)+' ok)'+"
                      "((d.rxtot)?(', letztes vor '+d.rxage+'s, '+d.rssi+' dBm'):'')+'</p>';"
+                     "lastSt=d.st||[];"
                      "if(!d.st||!d.st.length)h+='<p>Noch keine Station gehoert</p>';"
                      // Farben wie am Geraet (COL_APRS_DIRECT/DIGI/IGATE, siehe altTrackUpdate()): D = direkt
                      // per Funk gehoert (blau), R = ueber einen Digipeater-Hop weitergereicht (orange), I =
                      // Fremdverkehr ueber ein iGate/APRS-IS relayt (rot). Pegel/SNR seit v4.70 auch hier mit
                      // ausgegeben, damit die Webtabelle optisch dasselbe zeigt wie die Stationsliste am Geraet.
+                     // Jede Zeile klickbar (siehe CSS #altlist tbody tr oben): oeffnet showStationPopup() mit
+                     // demselben Info-Text wie das Popup am Geraet (aprsComment[]/"R"-Taste in der Liste).
                      "else{var kc={D:'#0000ff',R:'#ff8e00',I:'#ff0000'};"
                      "h+='<table><tr><th></th><th>Rufzeichen</th><th>km</th><th>dBm</th><th>SNR</th><th>zuletzt</th></tr>';"
-                     "d.st.forEach(function(s){var a=s.age,as=a<3600?"
+                     "d.st.forEach(function(s,k){var a=s.age,as=a<3600?"
                      "(Math.floor(a/60)+':'+String(a%60).padStart(2,'0')):(Math.floor(a/3600)+'h');"
-                     "h+='<tr><td style=\"color:'+(kc[s.k]||kc.D)+';font-weight:bold\">'+s.k+'</td><td>'+s.c+'</td>"
+                     "h+='<tr onclick=\"showStationPopup('+k+')\">"
+                     "<td style=\"color:'+(kc[s.k]||kc.D)+';font-weight:bold\">'+s.k+'</td><td>'+s.c+'</td>"
                      "<td>'+s.km.toFixed(1)+'</td><td>'+s.rssi+'</td><td>'+s.snr+'</td><td>'+as+'</td></tr>';});"
                      "h+='</table>';}"
                      "lst.innerHTML=h;"
@@ -6783,7 +7074,7 @@ static void webMenu() {
                      "if(lastSeq!==null&&d.seq!==lastSeq)beep();lastSeq=d.seq;}).catch(function(){});}"
                      "setRefresh(30);loadAlt();setInterval(pollStat,5000);pollStat();"
                      "</script>"
-                     "<h2>Men&uuml;</h2><table>");
+                     "<h2>Men&uuml;</h2><table>"));
   for (int i = 0; i < MI_COUNT; i++) {
     if (menuWebSkip(i)) continue;
     char val[24];
@@ -6922,9 +7213,15 @@ static void webAltStat() {
       // v4.70 pro Station erfassten Pegel/SNR-Werte (aprsRssi[]/aprsSnr[]) -- damit die Webtabelle unten
       // (loadAlt()) optisch dasselbe zeigen kann wie die Geraete-Ansicht, inkl. Farbe.
       const char *kindTag = (aprsRecvKind[i] == RECV_IGATE) ? "I" : (aprsRecvKind[i] == RECV_DIGI) ? "R" : "D";
+      // "i" (Roh-Array-Index, wie aprsListSel am Geraet) und "txt" (Zusatzinfo/Kommentar, siehe aprsComment[])
+      // neu dazu, damit die Weboberflaeche dieselbe Station anklickbar machen und dasselbe Popup wie am Geraet
+      // zeigen kann (siehe loadAlt()/showStationPopup() unten in webMenu() und /vstatfocus).
+      char eTxt[APRS_COMMENT_LEN * 2];
+      jsonEsc(aprsComment[i], eTxt, sizeof(eTxt));
       if (k) j += ",";
-      j += "{\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) +
-           ",\"k\":\"" + String(kindTag) + "\",\"rssi\":" + String(aprsRssi[i], 0) + ",\"snr\":" + String(aprsSnr[i], 1) + "}";
+      j += "{\"i\":" + String(i) + ",\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) +
+           ",\"k\":\"" + String(kindTag) + "\",\"rssi\":" + String(aprsRssi[i], 0) + ",\"snr\":" + String(aprsSnr[i], 1) +
+           ",\"txt\":\"" + String(eTxt) + "\"}";
     }
     j += "]}";
   } else {
@@ -6996,6 +7293,57 @@ static void webViewFocus() {
   server.sendHeader("Location", "/menu");
   server.send(303, "text/plain", "");
 }
+
+static bool aprsSendBeacon();   // weiter unten definiert (siehe auch die zweite, identische Vorwaertsdeklaration
+                                 // kurz vor handleInput() fuer den Trackballklick) -- hier zusaetzlich benoetigt,
+                                 // weil webViewSendPos() gleich darunter frueher in der Datei steht als jene.
+
+// "Zentrieren"-Knopf im Stationspopup der Weboberflaeche (siehe loadAlt()/showStationPopup() in webMenu()):
+// fokussiert/zentriert die Kartenansicht auf genau diese Station, 1:1 dieselbe Logik wie die Taste "R" in
+// der Stationsliste am Geraet selbst (siehe handleInput(), inAprsList && tolower(e)=='r').
+static void webViewStatFocus() {
+  int i = server.arg("i").toInt();
+  if (radioMode == 1 && i >= 0 && i < aprsN) {
+    aprsSoloIdx = i;
+    aprsPopupShown = false;
+    gfxView = 0;
+    mapManual = false;
+    viewZ = -1;
+    char m[72];
+    snprintf(m, sizeof(m), "WLAN: Fokus auf %s per Weboberflaeche von %s", aprsCall[i],
+             server.client().remoteIP().toString().c_str());
+    logLine(m);
+    gfxUpdate();
+  }
+  server.sendHeader("Location", "/menu");
+  server.send(303, "text/plain", "");
+}
+
+// Eigener Bedienknopf oben auf /menu: eigene Position SOFORT per LoRa-APRS senden -- 1:1 dieselbe Aktion wie
+// ein Trackballklick in der Kartenansicht bei eingeschaltetem LoRa-Beacon (siehe handleInput(), radioMode==1
+// && loraTxOn), unabhaengig vom Zeit-/Wegstrecke-Takt in aprsBeaconTick(). Nur im LoRa-Modus mit
+// eingeschaltetem Beacon und brauchbarem GPS-Fix sinnvoll -- sonst nur eine Logzeile, kein Senden.
+static void webViewSendPos() {
+  char m[96];
+  const char *pm;   // kurzer Ergebniscode fuer die Anzeige auf /menu (siehe webMenu(), Hinweiszeile oben)
+  if (radioMode == 1 && loraTxOn) {
+    double lat, lon;
+    if (homePosition(lat, lon) && gpsFixGoodEnoughToSend()) {
+      aprsSendBeacon();
+      snprintf(m, sizeof(m), "WLAN: eigene Position sofort gesendet (Knopf) von %s", server.client().remoteIP().toString().c_str());
+      pm = "sent";
+    } else {
+      snprintf(m, sizeof(m), "WLAN: eigene Position senden angefordert, aber kein brauchbarer GPS-Fix (von %s)", server.client().remoteIP().toString().c_str());
+      pm = "nofix";
+    }
+  } else {
+    snprintf(m, sizeof(m), "WLAN: eigene Position senden angefordert, aber LoRa-Beacon aus/nicht im LoRa-Modus (von %s)", server.client().remoteIP().toString().c_str());
+    pm = "off";
+  }
+  logLine(m);
+  server.sendHeader("Location", String("/menu?pm=") + pm);   // Ergebnis als kurzer Code in der Redirect-URL (siehe
+  server.send(303, "text/plain", "");                        // webMenu()) statt der Logzeile selbst -- vermeidet
+}                                                             // URL-Escaping von Freitext in der Location-Kopfzeile.
 
 static void drawMenu(int sel) {
   Adafruit_GFX *g = scr();
@@ -7093,11 +7441,23 @@ static void runMenu(int startSel = 0) {
     } else if (e == 0x08) {
       if (editing) { if (--editLen <= 0) { editing = false; editLen = 0; } }
       else menuStep(sel, -1, false);
-    } else if (e == EV_LEFT)  { editing = false; editLen = 0; menuStep(sel, -1, false); }
-    else if (e == EV_RIGHT)   { editing = false; editLen = 0; menuStep(sel, +1, false); }
-    else if (e == EV_UP)      { editing = false; editLen = 0; menuStep(sel, +1, true); }
-    else if (e == EV_DOWN)    { editing = false; editLen = 0; menuStep(sel, -1, true); }
-    else if (isdigit(e) || e == '.' || e == ',' || (e == '-' && sel == MI_LAND && editLen == 0)) {
+    } else if (e == EV_UP) {                          // Trackball bewegt hier nur noch die Auswahl (vorheriger
+      editing = false; editLen = 0;                   // Menuepunkt), verstellt KEINE Werte mehr -- siehe O/P unten
+      sel = (sel - 1 + MI_COUNT) % MI_COUNT;
+      if (sel != MI_SHUTDOWN) shutdownConfirm = false;
+    } else if (e == EV_DOWN) {                        // naechster Menuepunkt
+      editing = false; editLen = 0;
+      sel = (sel + 1) % MI_COUNT;
+      if (sel != MI_SHUTDOWN) shutdownConfirm = false;
+    } else if (e == EV_LEFT || e == EV_RIGHT) {
+      redraw = false;                                 // links/rechts tun im Menue bewusst nichts (mehr)
+    } else if ((tolower(e) == 'o' || tolower(e) == 'p') && menuIsNumeric(sel)) {
+      // Zahlenwerte jetzt ueber O (runter) / P (hoch) statt per Trackball, siehe oben. Nur wirksam, solange
+      // der aktuell gewaehlte Punkt eine Zahl ist -- sonst bleibt O/P wie gehabt der Direktsprung zu
+      // Eigener Track bzw. SD-Log (menuKey[]).
+      editing = false; editLen = 0;
+      menuStep(sel, tolower(e) == 'p' ? +1 : -1, false);
+    } else if (isdigit(e) || e == '.' || e == ',' || (e == '-' && sel == MI_LAND && editLen == 0)) {
       if (menuIsNumeric(sel)) {
         if (!editing) { editing = true; editLen = 0; }
         if (editLen < 9) editBuf[editLen++] = (char)e;
@@ -7187,9 +7547,11 @@ static void showHelpScreen() {
   showView();
 }
 
-static void toast(const char *name, const char *val) {
+// Wie toast(), aber mit selbst gewaehlter Anzeigedauer (ms) statt der festen 1800 ms -- fuer Meldungen, die
+// laenger lesbar bleiben sollen (siehe Trackballklick "Position senden" in handleInput(), 5000 ms).
+static void toastFor(const char *name, const char *val, uint32_t ms) {
   snprintf(toastText, sizeof(toastText), "%s: %s", name, val);
-  toastUntil = millis() + 1800;
+  toastUntil = millis() + ms;
   if (mapMode) {
     if (gfxReady()) gfxUpdate();
     else {                                            // kein Bildpuffer: Hinweis direkt zeichnen
@@ -7200,6 +7562,10 @@ static void toast(const char *name, const char *val) {
       tft.print(toastText);
     }
   } else line(106, toastText, ST77XX_YELLOW);
+}
+
+static void toast(const char *name, const char *val) {
+  toastFor(name, val, 1800);
 }
 
 static void toastTick() {
@@ -7378,9 +7744,9 @@ static void handleInput() {
       double lat, lon;
       if (homePosition(lat, lon) && gpsFixGoodEnoughToSend()) {
         aprsSendBeacon();
-        toast("LoRa", "Position gesendet");
-      } else {
-        toast("LoRa", "kein brauchbarer GPS-Fix");
+        toastFor("LoRa", "Position gesendet", 5000);           // 5 s statt der ueblichen 1,8 s, siehe toastFor() --
+      } else {                                                 // beim Fahren/Laufen bleibt sonst kaum Zeit zum Lesen
+        toastFor("LoRa", "nicht gesendet (kein GPS-Fix)", 5000);
       }
     } else {
       cycleView();
@@ -8692,6 +9058,16 @@ void setup() {
     while (!Serial && millis() - tw < 3000) delay(10);
   }
   delay(200);
+  {
+    // Reine Diagnose (kein eigener Watchdog mehr, siehe Changelog v4.76): zeigt an, falls ein harter Reset
+    // (z. B. ein interner ESP-IDF-Watchdog oder ein Panic) den Neustart ausgeloest hat.
+    esp_reset_reason_t rr = esp_reset_reason();
+    if (rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT || rr == ESP_RST_INT_WDT || rr == ESP_RST_PANIC) {
+      char m[112];
+      snprintf(m, sizeof(m), "### Neustart nach hartem Reset (Reset-Grund %d) -- GPX-Track wird ggf. fortgesetzt", (int)rr);
+      logLine(m);
+    }
+  }
   Serial.printf("\n##### T-Deck RS41 Empfang v%s gestartet #####\n", FW_VERSION);
   Serial.printf("Scan %.3f-%.3f MHz: grob %.3f MHz/%.0f kHz-Filter, fein %.0f kHz Schritt/%.1f kHz-Filter\n",
                 SCAN_START, SCAN_END, COARSE_STEP, COARSE_BW, FINE_STEP * 1000, rxBw);
