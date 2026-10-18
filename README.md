@@ -3,7 +3,7 @@
 Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1?srsltid=AU7gw4XTKNjTB_l7i5qSKFlh0Ql-kE6qLw8yG6WAu95MsKPBSIrkMjWZ) (ESP32-S3, SX1262-Funkmodul),
 die das Gerät in zwei Betriebsarten verwandelt:
 
-- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (433 MHz, FSK) direkt über
+- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (400-406 MHz, FSK) direkt über
   den integrierten SX1262 => Position, Höhe, Steig-/Sinkrate und ID live auf der Karte, inklusive
   Landevorhersage beim Sinken.
 - **LoRa-APRS**: eigenständiger APRS-Tracker/Empfänger auf 433,775 MHz (europäische LoRa-APRS-Konvention),
