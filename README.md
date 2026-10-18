@@ -1,9 +1,9 @@
 # T-Deck RS41 – Wettersonden-Empfänger & LoRa-APRS-Tracker
 
-Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1) (ESP32-S3, SX1262-Funkmodul),
+Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1?srsltid=AU7gw4XTKNjTB_l7i5qSKFlh0Ql-kE6qLw8yG6WAu95MsKPBSIrkMjWZ) (ESP32-S3, SX1262-Funkmodul),
 die das Gerät in zwei Betriebsarten verwandelt:
 
-- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (400 MHz, FSK) direkt über
+- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (433 MHz, FSK) direkt über
   den integrierten SX1262 => Position, Höhe, Steig-/Sinkrate und ID live auf der Karte, inklusive
   Landevorhersage beim Sinken.
 - **LoRa-APRS**: eigenständiger APRS-Tracker/Empfänger auf 433,775 MHz (europäische LoRa-APRS-Konvention),
@@ -33,7 +33,7 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
 
 ## Hardware
 
-- [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1) (ESP32-S3, SX1262, GPS, Akku, Tastatur, Trackball)
+- [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1?srsltid=AU7gw4XTKNjTB_l7i5qSKFlh0Ql-kE6qLw8yG6WAu95MsKPBSIrkMjWZ) (ESP32-S3, SX1262, GPS, Akku, Tastatur, Trackball)
 - MicroSD-Karte (Screenshots, GPX, Logs, Kartenkacheln)
 
 ## Kartenkacheln vorbereiten
@@ -82,6 +82,10 @@ dieselben Schritte funktionieren also auf beiden Systemen, ohne Zusatz-Plugin.
    automatisch an.
 4. Attribution/Nutzungsbedingungen der jeweiligen Quelle beachten (© Geobasis NRW bzw. © GeoBasis-DE / BKG).
 
+(Eine XYZ-Tiles-Verbindung wie im Browser-Panel links auch zu sehen funktioniert ebenso – du hast aber
+hauptsächlich WMS/WMTS-Verbindungen benutzt, deshalb oben so beschrieben. Außerhalb von NRW liefern die drei
+Geobasis-NRW-Dienste naturgemäß keine Daten – dann das jeweilige Landesamt bzw. einen bundesweiten Dienst
+verwenden.)
 
 ### Kacheln fürs T-Deck packen (`Tools/pack_tiles.py`)
 
@@ -111,8 +115,15 @@ kopiert werden. Alle Optionen: `python3 Tools/pack_tiles.py --help`.
 ## Flashen
 
 1. `config.h.example` im Sketch-Ordner nach `config.h` kopieren und dort eigenes Rufzeichen sowie
-   eigene Heimat-Koordinaten eintragen
-2. Einmalig per USB mit der Arduino-IDE flashen. Board- und Werkzeuge-Einstellungen (Arduino IDE 2.3.10):
+   eigene Heimat-Koordinaten eintragen (`config.h` ist persönlich und per `.gitignore` von GitHub
+   ausgenommen).
+2. `settings.h` liegt direkt im Repo und muss im selben Ordner wie das `.ino` bleiben (eigener Tab
+   in der Arduino-IDE). Dort stehen alle allgemein einstellbaren Werte gesammelt: Timings,
+   Popup-/Toast-/Menü-Anzeigedauern, GPS-Filter-Schwellwerte, Scan-Parameter, Beacon-Takt,
+   Puffer-/Listengrößen, Farben, WLAN-Zugangsdaten usw. — jeweils mit kurzer Erklärung, was der Wert
+   bewirkt. Anders als `config.h` ist sie **nicht** persönlich und braucht vor dem Compilieren keine
+   Kopie/Anpassung; wer Standardwerte ändern will, bearbeitet sie direkt.
+3. Einmalig per USB mit der Arduino-IDE flashen. Board- und Werkzeuge-Einstellungen (Arduino IDE 2.3.10):
 
    | Einstellung | Wert |
    |---|---|
@@ -134,8 +145,7 @@ kopiert werden. Alle Optionen: `python3 Tools/pack_tiles.py --help`.
    | Upload Speed | 921600 |
    | USB Mode | Hardware CDC and JTAG |
    | Zigbee Mode | Disabled |
-
-3. Danach: WLAN im Menü (Taste `W`) mit dem Heimnetz verbinden (Menü `E` für SSID/Passwort) – das Gerät
+4. Danach: WLAN im Menü (Taste `W`) mit dem Heimnetz verbinden (Menü `E` für SSID/Passwort) – das Gerät
    taucht dann unter Werkzeuge → Port als Netzwerkport auf (ArduinoOTA, kein Passwort nötig).
 
 ## Bedienung (Kurzreferenz)
