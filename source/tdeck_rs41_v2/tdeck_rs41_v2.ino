@@ -502,6 +502,19 @@
 //    neues globales Flag menuOpen (true waehrend runMenu() laeuft), das pollInput() jetzt zusaetzlich abfragt
 //    und die Stufe-1-Sperre im Menue damit aussen vor laesst. Stufe 2 ("+Tastatur", sperrt ohnehin ueberall)
 //    ist unveraendert.
+//  - v4.86: Qualitaets-Gate fuer das Senden der eigenen Position (gpsFixGoodEnoughToSend(), Mindest-
+//    Satellitenzahl + max. HDOP) galt bisher ausnahmslos ueberall -- auch beim manuellen Sofort-Versand per
+//    Trackballklick/Webseiten-Knopf. Beobachtet bei schwierigen Empfangsbedingungen (Funfahrt 18.10.): GPS
+//    hatte einen aktuellen Fix (Position auf der Karte sichtbar und korrekt), aber mit schlechter Geometrie
+//    (z. B. nur 3 Sat oder HDOP > 10) -- das manuelle Senden wurde trotzdem pauschal mit "kein Fix"
+//    verweigert, obwohl man selbst anhand der Karte sehen konnte, dass die Position stimmt. Fix: Das
+//    Qualitaets-Gate wurde aus aprsSendBeacon() selbst entfernt (die bisher von Automatik UND manuellem
+//    Versand gemeinsam genutzt wurde) und steht jetzt nur noch explizit in aprsBeaconTick() (automatischer
+//    Beacon-Takt) -- der wartet wie bisher auf einen guten Fix. webViewSendPos() (Webseiten-Knopf) und der
+//    Trackballklick (handleInput()) pruefen jetzt nur noch homePosition() (irgendein aktueller Fix, nicht
+//    aelter als 5 s), ohne Sat-/HDOP-Mindestwert -- manuell ausgeloest darf man sich auf den eigenen
+//    Kartenblick verlassen. Die Fehlermeldungen heissen entsprechend jetzt "kein aktueller GPS-Fix" statt
+//    "kein brauchbarer GPS-Fix" (praeziser: es fehlt wirklich jeder frische Fix, nicht nur ein guter).
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -638,7 +651,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.85"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.86"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -6881,7 +6894,7 @@ static void webMenu() {
     const char *txt;
     const char *col;
     if (pm == "sent") { txt = "Eigene Position wurde gesendet."; col = "#8f8"; }
-    else if (pm == "nofix") { txt = "Position NICHT gesendet: kein brauchbarer GPS-Fix."; col = "#fa0"; }
+    else if (pm == "nofix") { txt = "Position NICHT gesendet: kein aktueller GPS-Fix."; col = "#fa0"; }
     else if (pm == "off") { txt = "Position NICHT gesendet: LoRa-Beacon ist aus oder nicht im LoRa-Modus."; col = "#fa0"; }
     else { txt = ""; col = "#fa0"; }
     if (txt[0]) pmNotice = String("<p style=\"color:") + col + ";font-weight:bold\">" + txt + "</p>";
@@ -7247,12 +7260,14 @@ static void webViewSendPos() {
   const char *pm;   // kurzer Ergebniscode fuer die Anzeige auf /menu (siehe webMenu(), Hinweiszeile oben)
   if (radioMode == 1 && loraTxOn) {
     double lat, lon;
-    if (homePosition(lat, lon) && gpsFixGoodEnoughToSend()) {
+    if (homePosition(lat, lon)) {   // manuell ausgeloest: Qualitaets-Gate (Sat/HDOP) bewusst NICHT geprueft --
+                                     // wer selbst auf der Karte sieht, dass die Position stimmt, soll senden
+                                     // koennen, auch bei schwachem Fix (siehe aprsSendBeacon()/Changelog)
       aprsSendBeacon();
       snprintf(m, sizeof(m), "WLAN: eigene Position sofort gesendet (Knopf) von %s", server.client().remoteIP().toString().c_str());
       pm = "sent";
     } else {
-      snprintf(m, sizeof(m), "WLAN: eigene Position senden angefordert, aber kein brauchbarer GPS-Fix (von %s)", server.client().remoteIP().toString().c_str());
+      snprintf(m, sizeof(m), "WLAN: eigene Position senden angefordert, aber kein aktueller GPS-Fix (von %s)", server.client().remoteIP().toString().c_str());
       pm = "nofix";
     }
   } else {
@@ -7664,11 +7679,13 @@ static void handleInput() {
                                                       // unveraendert weiter) -- sonst (wie bisher) nur Ansicht wechseln
     if (radioMode == 1 && loraTxOn) {
       double lat, lon;
-      if (homePosition(lat, lon) && gpsFixGoodEnoughToSend()) {
+      if (homePosition(lat, lon)) {   // manuell ausgeloest: Qualitaets-Gate (Sat/HDOP) bewusst NICHT geprueft,
+                                       // siehe webViewSendPos()/Changelog -- wer die Position auf der Karte
+                                       // selbst als richtig erkennt, soll auch bei schwachem Fix senden koennen
         aprsSendBeacon();
         toastFor("LoRa", "Position gesendet", TOAST_MS_LONG);   // laenger als ueblich, siehe toastFor()/settings.h --
       } else {                                                 // beim Fahren/Laufen bleibt sonst kaum Zeit zum Lesen
-        toastFor("LoRa", "nicht gesendet (kein GPS-Fix)", TOAST_MS_LONG);
+        toastFor("LoRa", "nicht gesendet (kein aktueller GPS-Fix)", TOAST_MS_LONG);
       }
     } else {
       cycleView();
@@ -8401,15 +8418,20 @@ static void aprsEncodeCompressed(double lat, double lon, char symCode, bool have
 // ausschliesslich ueber das Funkmodul, keine Internetverbindung beteiligt (der SondeHub-Upload selbst
 // bleibt unberuehrt, siehe menuValue()/menuStep() MI_SHUB). Unterbricht kurz den Empfang, da der SX1262
 // nicht gleichzeitig senden und empfangen kann.
+// Qualitaets-Gate (Sat/HDOP, gpsFixGoodEnoughToSend()) bewusst NICHT mehr hier drin (Fix Okt. 2026): diese
+// Funktion wird sowohl vom automatischen Beacon-Takt (aprsBeaconTick(), prueft die Guete selbst VOR dem
+// Aufruf) als auch vom manuellen Sofort-Versand (Trackballklick/Webseiten-Knopf) aufgerufen -- beim manuellen
+// Ausloesen sieht man die Position ja selbst auf der Karte und soll auch bei schwachem Fix senden koennen,
+// nur beim automatischen Takt soll weiter auf einen guten Fix gewartet werden. Einzige Bedingung hier: ein
+// AKTUELLER Fix (homePosition(), nicht aelter als 5 s) muss vorliegen -- sonst lieber nicht mit einer alten/
+// geratenen Position senden.
 static bool aprsSendBeacon() {
   double lat, lon;
   if (!homePosition(lat, lon)) return false;   // kein aktueller GPS-Fix -- lieber nicht mit alter Position senden
-  if (!gpsFixGoodEnoughToSend()) return false; // Fix da, aber Guete (Sat-Minimum/HDOP) nicht ausreichend -- lieber warten
-                                                 // (aprsBeaconTick() versucht es jetzt bald wieder, siehe dort)
   char pos[16];
-  // Kurs/Tempo nur mit hineinkodieren, wenn gerade ein frischer, brauchbarer Fix vorliegt (siehe oben) UND
-  // RMC schon einmal einen gueltigen Kurs gemeldet hat (courseDeg-Sentinel -1, siehe GpsState) -- sonst
-  // bleiben die beiden Bytes auf Leerzeichen (= "kein Kurs/Tempo"), ganz normal fuer APRS.
+  // Kurs/Tempo nur mit hineinkodieren, wenn gerade ein frischer Fix vorliegt (siehe oben) UND RMC schon
+  // einmal einen gueltigen Kurs gemeldet hat (courseDeg-Sentinel -1, siehe GpsState) -- sonst bleiben die
+  // beiden Bytes auf Leerzeichen (= "kein Kurs/Tempo"), ganz normal fuer APRS.
   bool haveCourse = gps.courseDeg >= 0.0f;
   aprsEncodeCompressed(lat, lon, aprsSymbolChars[aprsSymbolIdx % NSYMBOL], haveCourse, gps.courseDeg, gps.speedKmh, pos, sizeof(pos));
   char altTxt[16] = "";
@@ -8490,7 +8512,10 @@ static void aprsBeaconTick() {
   // ganzes Intervall verschoben, voellig spurlos im Log -- beobachtet als mehrminuetige Sendeluecken beim
   // Radfahren und eine 2,5-stuendige Luecke im Stand. Jetzt nur bei tatsaechlichem Erfolg so weit neu
   // takten, sonst bald (APRS_BEACON_RETRY_MS) erneut versuchen.
-  if (aprsSendBeacon()) {
+  // Qualitaets-Gate (Sat/HDOP) jetzt hier statt in aprsSendBeacon() selbst (Fix Okt. 2026, siehe dort): der
+  // automatische Takt soll weiter auf einen guten Fix warten, der manuelle Sofort-Versand (Trackball/Webseite)
+  // aber nicht mehr.
+  if (gpsFixGoodEnoughToSend() && aprsSendBeacon()) {
     aprsBeaconNextMs = now + interval;
     if (haveFix) { aprsBeaconLastLat = lat; aprsBeaconLastLon = lon; aprsBeaconLastSet = true; }
   } else {
