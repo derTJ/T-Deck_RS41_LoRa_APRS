@@ -516,6 +516,171 @@
 //    Kartenblick verlassen. Die Fehlermeldungen heissen entsprechend jetzt "kein aktueller GPS-Fix" statt
 //    "kein brauchbarer GPS-Fix" (praeziser: es fehlt wirklich jeder frische Fix, nicht nur ein guter).
 //
+//  - v4.87: Vier Menue-/Bedienwuensche umgesetzt:
+//    1) Menue nur nach aktuellem Funkmodus filtern (menuItemApplies()): im Sondenbetrieb nicht mehr sichtbar
+//       sind Sendeleistung/Spreizfaktor/Codierrate (nur LoRa relevant), im LoRa-Modus nicht mehr sichtbar sind
+//       Suche/Fehlerkorr./Vorhersage/Landehoehe (nur Sondenempfang relevant) -- sowohl am Geraet (drawMenu()/
+//       runMenu(), siehe dort) als auch auf der Weboberflaeche (menuWebSkip() blendet dieselben Punkte aus).
+//       Trackball hoch/runter im Geraete-Menue ueberspringt ausgeblendete Punkte automatisch (menuNextApplicable()).
+//    2) LoRas eigene Sende-/Empfangsparameter (Frequenz, Bandbreite, Spreizfaktor, Codierrate) sind jetzt im
+//       LoRa-Modus ueber dieselben Menuepunkte F/B einstellbar wie bisher nur im Sondenbetrieb, dazu zwei neue
+//       Punkte Spreizfaktor (D) und Codierrate (N) -- siehe loraFreqMHz/loraBwKHz/loraSf/loraCr, persistiert
+//       wie die anderen Menuewerte. Vorgabe bleibt die europaeische LoRa-APRS-Konvention (433.775 MHz / BW125 /
+//       SF12 / CR4-5); wer davon abweicht, ist nicht mehr kompatibel zu unveraendert konfigurierten anderen
+//       LoRa-APRS-Stationen (Hinweis dazu jetzt auch im Menue selbst, siehe drawMenu()). Eine Aenderung
+//       initialisiert den Funk neu (loraParamsChanged, siehe loop()), OHNE Stationsliste/Hoehentrack/LoRa-
+//       Upload-Status zurueckzusetzen (anders als ein echter Moduswechsel ueber radioApplyMode()).
+//    3) "Position gesendet"-Rueckmeldung (Taste 0-Klick am Geraet wie der Knopf auf der Weboberflaeche) zeigt
+//       jetzt zusaetzlich Datum und Uhrzeit des Sendens (shortDateTime() am Geraet, dateTimeText() im Web).
+//    4) Der bisherige Fallback in handleInput() ("ein Buchstabe ausserhalb des Menues oeffnet es direkt beim
+//       passenden Punkt") ist entfallen -- einziger Weg ins Menue ist jetzt Enter. Grund: ein Buchstabe, der
+//       versehentlich ausserhalb des Menues gedrueckt wird (z. B. in der Tasche), sollte nicht mehr ungewollt
+//       das Menue oeffnen. Die Buchstaben-Direktsprungziele INNERHALB des bereits geoeffneten Menues bleiben
+//       unveraendert (eigene Logik in runMenu()).
+//
+//  - v4.88: Zwei weitere Wuensche umgesetzt:
+//    1) Boot-WLAN-Sequenz (siehe wifiBootSeq/setup()/wifiTick()/wifiBootApTick()): statt wie bisher entweder
+//       gar kein WLAN-Versuch oder nur der Heimnetz-Versuch gibt es jetzt automatisch eine zweite Stufe: ist
+//       das Heimnetz unbekannt oder nach WIFI_BOOT_HOME_TIMEOUT_MS (20 s) nicht erreichbar, oeffnet sich
+//       automatisch der eigene Zugangspunkt fuer WIFI_BOOT_AP_MS (5 min) -- Gelegenheit, sich kurz zu
+//       verbinden (z. B. unterwegs ohne Heimnetz in der Naehe) --, danach geht das WLAN GANZ aus, um den Akku
+//       zu schonen. Greift der Nutzer waehrenddessen selbst ins WLAN-Menue (W) ein, wird die Sequenz sofort
+//       beendet und es gilt wieder das bisherige rein manuelle Verhalten.
+//    2) Taste L in der Kartenansicht (nur LoRa-Modus): pausiert LoRa Upload kurz, ohne es ueber das Menue
+//       dauerhaft abzuschalten -- nach LORA_PAUSE_MS (1 min) schaltet es sich von selbst wieder an, mit kurzem
+//       Popup (siehe loraPauseUntilMs/loraPauseTick()). Eine bewusste Entscheidung ueber das Menue (A) oder ein
+//       Moduswechsel beendet eine laufende Pause sofort, statt sie spaeter ungefragt zu ueberschreiben.
+//
+//  - v4.89: Damit man die laufende LoRa-Upload-Pause (Taste L, siehe v4.88) nicht aus den Augen verliert --
+//    z. B. weil man gerade die Antenne wechselt und das rechtzeitig wieder anschliessen muss --, zeigt die
+//    Kartenansicht jetzt direkt unter dem Statusblock (Batterie/GPS) einen Countdown ("L 0:42") und einen
+//    schmalen Fortschrittsbalken, die in den letzten LORA_PAUSE_WARN_S Sekunden (5 s) rot statt orange werden
+//    (siehe drawLoraPause()). Zusaetzlich piept es in dieser Zeit einmal je Sekunde (LORA_PAUSE_WARN_HZ, siehe
+//    loraPauseTick()) -- bewusst UNABHAENGIG vom allgemeinen Ton-an/aus (Taste $/Menue X), da es eine selbst
+//    ausgeloeste Sicherheitswarnung ist, kein normaler Empfangston. Der Countdown erscheint nur in der
+//    Kartenansicht (gfxView 0) -- in der Stationsliste wuerde er die oberste Zeile ueberdecken.
+//
+//  - v4.90: GPX-Track-Fortsetzung jetzt auch nach laengerer bewusster Pause (z. B. Geraet im Gebaeude
+//    ausgeschaltet, schlechter GPS-Empfang dort, danach draussen wieder eingeschaltet -- kann durchaus eine
+//    halbe Stunde oder mehr sein): bisher wurde ein Track nur innerhalb von GPX_RESUME_GRACE_S (5 min, kurzer
+//    Neustart/Watchdog) stillschweigend fortgesetzt, sonst immer ein neuer angelegt. Liegt der letzte Track
+//    laenger als das, aber nicht aelter als GPX_RESUME_ASK_S (settings.h, Default 24 h) zurueck, fragt die neue
+//    confirmGpxResumeAsk() beim ersten GPS-/NTP-Zeitstempel blockierend J/N nach, ob er fortgesetzt werden
+//    soll (siehe gpxEnsureIchId()). Countdown und Fortschrittsbalken dieser Abfrage erscheinen bewusst
+//    formatfuellend ueber die komplette Seite statt klein in einer Ecke, ihre gemeinsame Laenge steht als
+//    GPX_RESUME_ASK_MS in settings.h -- reagiert niemand rechtzeitig, wird automatisch fortgesetzt (wie "J").
+//
+//  - v4.91: Zwei Wuensche vom selben Tag:
+//    1) Der LoRa-Upload-Pause-Countdown/-Balken (Taste L, siehe v4.88/v4.89) ist jetzt bildschirmfuellend statt
+//       nur klein unter dem Statusblock, damit man ihn beim Antennenwechsel sicher im Auge behaelt (drawLoraPause()
+//       ueberschreibt dafuer bewusst die Kartenzeichnung dieses Frames, solange die Pause laeuft -- danach
+//       zeichnet der naechste Frame die Karte wie gewohnt wieder normal, nichts muss extra aufgeraeumt werden).
+//    2) Neue drawClock(): zeigt tt.mm.jjjj hh:mm direkt unter der GPS-Anzeige, sobald die Uhrzeit per GPS/NTP
+//       feststeht (timeSet) -- vorher leer. Braucht mehr Breite als Batterie/GPS, drawStatus() ruft sie daher
+//       mit kleinerem x auf; die Menue-Bildschirmzeichnung (drawMenu()) laesst der dadurch etwas breiteren und
+//       hoeheren Statusblock-Ecke jetzt entsprechend mehr Platz (vorher 25/262 px, jetzt 32/220 px).
+//
+//  - v4.92: Drei Korrekturen/Wuensche zu v4.90/v4.91, noch am selben Tag zurueckgemeldet:
+//    1) BUG behoben: der Umbau von drawLoraPause() auf die bildschirmfuellende Anzeige (v4.91) liess
+//       versehentlich noch ein fillRect() der alten, kleinen v4.89-Ecken-Anzeige stehen -- das malte bei JEDEM
+//       Frame OHNE laufende Pause ein schwarzes Rechteck mitten in die Karte. Ersatzlos entfernt: frameCanvas
+//       wird ohnehin jeden Frame komplett frisch aus bgCanvas/bigCanvas aufgebaut (siehe prepareMapBackground()),
+//       ausserhalb einer laufenden Pause ist hier also nichts zu tun.
+//    2) drawClock() (v4.90/v4.91) jetzt zweizeilig statt einzeilig: Uhrzeit oben, Datum darunter (Wunsch:
+//       "Datum und Uhrzeit untereinander, Datum unten"), mit zweistelligem statt vierstelligem Jahr, damit beide
+//       Zeilen in dieselbe schmale Statusblock-Spalte wie Batterie/GPS passen (x wie dort, kein Extra-Platz
+//       noetig) -- die vierstellige Einzeiler-Fassung aus v4.91 lief am rechten Bildschirmrand aus dem Rahmen
+//       und wurde abgeschnitten. drawStatus()/drawMenu() entsprechend wieder auf die urspruengliche Spaltenbreite
+//       (262 px) zurueckgesetzt, nur die Hoehe blieb wegen der zweiten Zeile groesser.
+//    3) BUG behoben: die GPX-Track-Fortsetzungsabfrage (confirmGpxResumeAsk(), v4.90) kam nicht, obwohl der
+//       letzte Track deutlich weniger als GPX_RESUME_ASK_S zurücklag -- gpxEnsureIchId() (und damit die Abfrage)
+//       hing bisher am naechsten echten GPS-FIX (wird aus der GGA/RMC-Verarbeitung heraus aufgerufen), und genau
+//       in Gebaeuden (schlechter GPS-Empfang -- der ganze Anlass fuer dieses Feature) kann der lange auf sich
+//       warten lassen oder ganz ausbleiben, obwohl die Uhrzeit laengst per NTP ueber WLAN feststeht. onTimeSet()
+//       ruft gpxEnsureIchId() jetzt direkt selbst auf, sobald ueberhaupt eine Uhrzeit vorliegt (GPS ODER NTP) --
+//       unabhaengig von einem Fix. Da onTimeSet() bei der Quelle "GPS" aber selbst schon mitten aus der NMEA-
+//       Verarbeitung (letztlich aus gpsPoll()) heraus aufgerufen wird, ruft confirmGpxResumeAsk() jetzt bewusst
+//       KEIN gpsPoll() mehr in seiner Warteschleife auf (haette sich sonst verschachtelt selbst aufgerufen) --
+//       eingehende NMEA-Daten sammeln sich waehrenddessen im UART-Puffer und werden danach normal nachverarbeitet.
+//
+//  - v4.93: Vier weitere Wuensche/Korrekturen vom selben Tag:
+//    1) Die 5 LoRa-Funkparameter stehen jetzt als zusammenhaengender Block in der Reihenfolge Frequenz/
+//       Bandbreite/Spreizfaktor/Codierrate/Sendeleistung direkt hintereinander im Menue (vorher: Frequenz/
+//       Bandbreite ganz vorne, Sendeleistung/Spreizfaktor/Codierrate weit hinten getrennt davon). Reine
+//       Umsortierung der MI_*-Enum-Deklaration -- die Tasten bleiben pro Punkt unveraendert (z. B. weiterhin
+//       'u' fuer Sendeleistung), nur die Position in der Liste verschiebt sich.
+//    2) drawClock() (v4.90/v4.92) zeigt jetzt zusaetzlich die Sekunden (hh:mm:ss) -- kostet praktisch nichts
+//       extra, die Zeile wird ohnehin mehrmals pro Sekunde mit dem restlichen Kartenbild neu gezeichnet.
+//    3) BUG behoben: die Firmware-Versionsnummer im Menuekopf (drawMenu()) stand bei y=27, also mitten in der
+//       seit v4.92 zweizeiligen Uhrzeit/Datum-Anzeige (y 24..42, siehe drawClock()) -- beide ueberlagerten sich
+//       unleserlich. Jetzt bei y=46, klar unterhalb des Statusblocks.
+//    4) Das Rufzeichen auf dem Begruessungsbildschirm (bootSplash()) war fest auf Cyan verdrahtet -- jetzt wie
+//       der Rest der Darstellungsfarben als COL_BOOT_CALLSIGN in settings.h (dort auf Rot gesetzt).
+//
+//  - v4.94: Fuenf weitere Wuensche/Korrekturen vom selben Tag:
+//    1) BUG behoben: zwischen Batterie- und GPS-Anzeige blieb eine 1 Px hohe Zeile ungeraeumt stehen (drawBattery()
+//       raeumte nur bis y+10, drawGps() faengt aber erst bei y+12 an) -- je nach Kartenuntergrund durch diese
+//       Luecke eine irritierende helle Pixelzeile sichtbar. drawBattery() raeumt jetzt 1 Px mehr (bis y+11),
+//       luecken-/ueberlappungslos an drawGps() anschliessend.
+//    2) Neue statusBgFill(): der schwarze Untergrund hinter Batterie/GPS/Uhrzeit ist jetzt teilweise durchsichtig
+//       (STATUS_BG_TRANSPARENCY_PCT in settings.h, Default 75 %) statt blickdicht schwarz -- mischt das
+//       darunterliegende Kartenbild direkt im Bildpuffer durch, nur moeglich/aktiv, wenn in frameCanvas gemalt
+//       wird (in der Textansicht/im Menue bleibt es ohnehin schwarz, siehe Kommentar dort).
+//    3) LoRa-Upload-Pause (Taste L, bildschirmfuellender Countdown seit v4.91) laesst sich jetzt mit der
+//       Ruecktaste vorzeitig beenden, statt bis LORA_PAUSE_MS warten zu muessen (Wunsch: "Antennenwechsel-
+//       Countdown stoppen") -- neue loraPauseEnd() buendelt den gemeinsamen Teil fuer automatisches und
+//       manuelles Pausenende, ein Hinweis dazu steht jetzt auch auf dem Pausenbildschirm selbst.
+//    4) confirmLoraTxResume() (LoRa-Sende-Startabfrage) hat jetzt wie confirmGpxResumeAsk() (v4.90) einen
+//       Timeout mit Countdown/Fortschrittsbalken (LORA_TXRESUME_ASK_MS, settings.h) -- reagiert niemand
+//       rechtzeitig, verfaellt sie aber bewusst auf "N" (NICHT senden), nicht auf "J" wie beim GPX-Track: dort
+//       ist Fortsetzen die sichere Seite, hier ist es Nicht-senden (dieselbe Grundregel wie loraTxOn nach jedem
+//       Neustart erst mal aus).
+//    5) Batterie/GPS/Uhrzeit-Spalte (und die Firmware-Version im Menuekopf) um 1 Zeichen (6 Px) nach rechts
+//       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
+//       entsprechend mitgezogen.
+//
+//  - v4.95 (Wunsch Okt. 2026, "settings auch als ini ins dateisystem machen, updatebar per upload"): ein
+//    Grossteil der "weichen" Werte aus settings.h (Timings, Schwellwerte, Farben, Transparenz, Toene -- NICHT
+//    Pins, Funkprotokoll-Parameter oder die zusammenhaengenden RS41-Scan-Parameter, siehe Kommentar dort) steht
+//    jetzt zusaetzlich in /config.ini auf der SD-Karte und ist darueber zur LAUFZEIT aenderbar, ohne neu zu
+//    compilieren (Ausnahme: BEEP_MS blieb #define -- dimensioniert den Tonpuffer in beepInit(), s. settings.h):
+//    1) settings.h: die betroffenen #define-Konstanten sind jetzt echte (beschreibbare) Variablen mit
+//       demselben Namen wie vorher -- an den Verwendungsstellen im .ino musste dadurch nichts geaendert werden.
+//       Mit "-- CFG:" im Kommentar markiert, siehe Datei-Kopf dort fuer die genaue Abgrenzung.
+//    2) Neue Weboberflaeche /cfg (verlinkt von der Startseite "/"): zeigt den aktuellen Stand aller dieser
+//       Werte als Text zum direkten Bearbeiten (Textfeld, "Speichern & sofort anwenden"), dazu ein Download-
+//       Knopf (/cfgdl, als .ini-Datei) und ein Datei-Upload-Formular (/cfgup) fuer Offline-Bearbeitung.
+//    3) Beides (Speichern wie Hochladen) schreibt /config.ini auf die SD-Karte UND wendet die Werte sofort an
+//       (keine Neustart noetig, Wunsch Okt. 2026) -- siehe applyConfigText()/saveConfigIniToSd().
+//    4) /config.ini wird zusaetzlich beim Start gelesen (siehe applyConfigIniFromSd() in setup(), kurz nach
+//       sdInit()), damit ein zuvor per Weboberflaeche gespeicherter Stand auch einen Neustart uebersteht.
+//       Existiert die Datei noch gar nicht, wird sie einmalig mit den aktuellen (Compile-Default-)Werten
+//       neu angelegt, statt einfach zu fehlen -- sofort ein vollstaendiges Beispiel zum Anschauen/Bearbeiten.
+//    5) Farben (COL_...) stehen jetzt ueberall als gewohntes RGB888 (0xRRGGBB, wie in jedem Colorpicker)
+//       statt im fuer Menschen ungebraeuchlichen RGB565-Format -- sowohl in settings.h (neues RGB()-Makro,
+//       rechnet beim Compilieren exakt auf den vom Display benoetigten 16-Bit-Wert um) als auch in
+//       config.ini/im Webformular (rgb565To24()/RGB() im .ino, zur Laufzeit). Alle Werte unveraendert, nur
+//       die Schreibweise ist neu.
+//    6) Das Menue "/menu" (Fernsteuerung/Live-Bild) verlinkt jetzt ebenfalls auf /cfg, nicht nur die Startseite.
+//    7) Neuer Knopf (mit JS-Rueckfrage) fuer "Werte komplett daneben, weiss nicht mehr wie sie waren": "Auf
+//       Werkseinstellungen zuruecksetzen" (/cfgreset) setzt sofort alle Werte auf die Compile-Defaults aus
+//       settings.h zurueck (kein Neustart noetig) und schreibt sie gleich als neue config.ini. Die Compile-
+//       Defaults werden dafuer einmalig ganz am Anfang von setup() in CFG_DEFAULTS[] gesichert
+//       (cfgCaptureDefaults()), noch bevor applyConfigIniFromSd() sie evtl. ueberschreibt.
+//    8) Neuer On-Device-Editor (Wunsch Okt. 2026, "geht das auch auf dem kleinen Bildschirm?"): Menuepunkt
+//       "Konfiguration (ini)" (Taste H) oeffnet cfgMenu() -- einen eigenen scrollbaren Vollbildschirm mit
+//       allen ~89 config.ini-Werten, Trackball hoch/runter waehlt, Enter/Klick oeffnet die vorhandene
+//       Texteingabe (physische Tastatur) zum Eintippen eines neuen Werts. Jeder Eintrag hat jetzt zusaetzlich
+//       eine sinnvolle Min/Max-Grenze (CfgEntry.lo/.hi, z. B. Transparenz 0..100, Farben 0x000000..0xFFFFFF) --
+//       ausserhalb des Bereichs oder keine gueltige Zahl: Toast mit dem erlaubten Bereich, alter Wert bleibt.
+//       Gueltige Werte wirken sofort und werden gleich auf die SD-Karte gespeichert, wie beim Webformular.
+//       Diese Bereichspruefung gilt NUR fuer diesen On-Device-Editor, nicht fuer /cfgsave bzw. /cfgup (dort
+//       weiterhin nur eine Typpruefung wie bisher).
+//    9) Feinschliff am neuen Menuepunkt: Text "Konfiguration (ini)" -> "Konfiguration (.ini) editieren"
+//       (die Anzeige der Werteanzahl ("X Werte") daneben entfernt, unnoetige Info). Dabei BUG behoben: der
+//       Zeilenpuffer fuer Menuenamen (char nm[24] in drawMenu()) schnitt den laengeren Text hart ab (sichtbar
+//       hinter ".ini") -- auf 40 Byte vergroessert.
+//
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
 //   GPS-Infoblock (0x7C) mit Woche/TOW, 0x114..0x11F ECEF X/Y/Z (cm)
@@ -590,6 +755,7 @@ static void gpxQueue(GpxTrack &t, GpxPoint *buf, int &count, const char *idStr, 
 static void gpxDrain(GpxTrack &t, GpxPoint *buf, int &count, const char *idStr, const char *trkName);
 static bool gpxEnsureIchId();
 static void gpxReloadOwnTrailTail();    // weiter unten definiert (braucht trkptParse()), siehe gpxEnsureIchId()
+static bool confirmGpxResumeAsk(uint32_t ageS);   // weiter unten definiert, siehe gpxEnsureIchId()/Feature v4.90
 static void gpxPersistResumeInfo();     // weiter unten definiert, siehe gpsLogTick()/doShutdown()
 static GpxTrack gpxIch, gpxSonde;   // muss hier stehen: die Arduino-IDE hebt nur Funktions-, keine Variablendeklarationen nach oben
 static char gpxSondeId[12] = "";        // ID, unter der die aktuell offene(n)/gepufferten Sonde-Punkte abgelegt werden
@@ -635,8 +801,8 @@ static uint32_t gpxLastFlushMs = 0;
 
 // ---------- Einstellungen ---------- (TFT_INVERT, Farben usw. siehe settings.h)
 
-// ---------- Farben der Kartenmarker (RGB565) ----------
-// Eigene Farben: 0xRRRR-Wert = ((R & 0xF8) << 8) | ((G & 0xFC) << 3) | (B >> 3)
+// ---------- Farben der Kartenmarker ----------
+// Intern RGB565, geschrieben/bearbeitet aber als gewohntes RGB888 (0xRRGGBB) -- siehe RGB()-Makro in settings.h
 // Farben der Kartenmarker (COL_*), CROSS_HALF, SONDE_SIGNAL_FLASH_MS -- siehe settings.h
 // VERBOSE_DUMP -- siehe settings.h
 #define PIN_BAT_ADC    4       // Batteriespannung ueber Spannungsteiler 1:2
@@ -651,7 +817,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.86"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "4.95"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -694,6 +860,30 @@ const float RX_BW_DEFAULT = 23.4;       // Standard-Bandbreite fuer Feinscan und
 #define APRS_CR        5
 #define APRS_SYNCWORD  0x12
 #define APRS_PREAMBLE  8
+
+// Feature v4.87: Frequenz/Bandbreite/Spreizfaktor/Codierrate jetzt am Geraet/per Web einstellbar (Menue, nur im
+// LoRa-Modus sichtbar, siehe menuItemApplies()) -- Vorgabewerte weiterhin die APRS_*-Konstanten oben (euro-
+// paeische LoRa-APRS-Konvention). Das aendert NICHT die fruehere Entscheidung, Protokollkonstanten aus
+// settings.h herauszuhalten (siehe Kommentar dort/am Dateianfang): APRS_SF/APRS_CR bleiben die Code-
+// Vorgabewerte, dies hier ist genau derselbe Veraenderbar-und-persistiert-Mechanismus wie bei den laengst
+// einstellbaren Sonde-Werten (freqMHz/rxBw/txPowerDbm), nur fuer den LoRa-Zweig nachgezogen. Achtung: Abweichen
+// von der Standard-Konvention (433.775 MHz / BW125 / SF12 / CR4-5) bedeutet, dass dieses Geraet nicht mehr mit
+// anderen, unveraendert konfigurierten LoRa-APRS-Stationen kompatibel ist.
+static float loraFreqMHz = APRS_FREQ_MHZ;
+static float loraBwKHz   = APRS_BW_KHZ;
+static uint8_t loraSf    = APRS_SF;
+static uint8_t loraCr    = APRS_CR;
+static volatile bool loraParamsChanged = false;   // LoRa-Funkparameter im Menue geaendert -- Funk braucht eine
+                                                    // Neuinitialisierung (siehe loop()/aprsRadioInit()), aber OHNE
+                                                    // die weiteren Seiteneffekte von radioApplyMode() (Stationsliste/
+                                                    // Hoehentrack/loraTxOn bleiben unberuehrt, nur die Funkparameter
+                                                    // selbst wechseln, nicht der Modus)
+static const float loraBwList[10] = {7.8f, 10.4f, 15.6f, 20.8f, 31.25f, 41.7f, 62.5f, 125.0f, 250.0f, 500.0f};  // gueltige LoRa-Bandbreiten [kHz]
+static const uint8_t loraSfList[7] = {6, 7, 8, 9, 10, 11, 12};    // gueltige Spreizfaktoren (SF5 vom SX1262 praktisch nicht nutzbar)
+static const uint8_t loraCrList[4] = {5, 6, 7, 8};                // gueltige Codierraten, als Nenner (5 = 4/5 usw.)
+#define NLORABW 10
+#define NLORASF 7
+#define NLORACR 4
 
 // Zweistufiger Scan: erst grob mit sehr breitem Filter, dann fein nur um die Kandidaten
 // Scan-Parameter (COARSE_STEP/NCOARSE/COARSE_BW/FINE_SPAN/FINE_PASSES/BAND_MIN/FINE_STEP/MAX_CAND/REL_MARGIN/
@@ -774,6 +964,14 @@ static uint8_t wifiMode = 0;            // 0 aus, 1 Heimnetz (Station), 2 eigene
 static bool wifiConnecting = false;     // Verbindung zum Heimnetz wird aufgebaut
 static uint32_t wifiActivityMs = 0;     // eigener Zugangspunkt: Zeitpunkt des letzten verbundenen Geraets -- siehe wifiIdleTick()
 static uint32_t wifiConnMs = 0;
+// Feature v4.88: Boot-WLAN-Sequenz -- gleich nach dem Einschalten erst das Heimnetz versuchen (falls bekannt),
+// bei Fehlschlag/unbekanntem Heimnetz WIFI_BOOT_AP_MS lang den eigenen Zugangspunkt oeffnen (Gelegenheit, sich
+// kurz zu verbinden, z. B. unterwegs ohne Heimnetz in der Naehe), danach WLAN ganz aus -- spart Akku, wenn
+// niemand zugreift. Siehe setup()/wifiTick()/wifiBootApTick(). wifiBootSeq wird false, sobald die Sequenz
+// abgeschlossen ist (Heimnetz verbunden, oder Hotspot-Fenster abgelaufen) ODER der Nutzer selbst eingreift
+// (Menue W, siehe menuStep() MI_WIFI) -- ab dann gilt wieder das bisherige rein manuelle WLAN-Verhalten.
+static bool wifiBootSeq = false;
+static uint32_t wifiBootApStartMs = 0;
 static bool ntpWanted = false;          // beim Einschalten: Uhrzeit per NTP holen, solange noch kein GPS-Fix vorliegt
 static bool ntpConfigured = false;      // configTime() wurde fuer die aktuelle WLAN-Verbindung schon aufgerufen
 static uint32_t ntpStartMs = 0;
@@ -808,6 +1006,15 @@ static volatile bool radioModeChanged = false;  // Menue hat radioMode geaendert
 // loadSettings()/saveSettings(), Prefs-Schluessel "loratx") merkt sich aber, ob es das WAR, und confirmLoraTxResume()
 // fragt damit beim Start im LoRa-Modus nach, ob wieder gesendet werden soll (siehe setup()).
 static bool loraTxOn = false;
+// Feature v4.88: Taste L in der Kartenansicht pausiert LoRa Upload kurz (z. B. um nicht gerade waehrend eines
+// Gespraechs/einer kritischen Passage zu senden), OHNE es dauerhaft abzuschalten -- nach LORA_PAUSE_MS schaltet
+// es sich von selbst wieder an (Sicherheitsnetz gegen Vergessen), mit kurzem Popup. 0 = keine Pause aktiv.
+// Siehe handleInput()/loraPauseTick()/settings.h. Eine bewusste Entscheidung ueber Menue A (menuStep()/
+// menuSetIndex() MI_SHUB) oder ein Moduswechsel (radioApplyMode()) beendet eine laufende Pause sofort.
+static uint32_t loraPauseUntilMs = 0;
+static int loraPauseLastWarnS = -1;   // Feature v4.89: letzte Sekunde, fuer die schon gepiept wurde (siehe
+                                        // loraPauseTick()) -- verhindert Mehrfach-Beeps in derselben Sekunde;
+                                        // -1 = noch keine (frisch gestartete Pause, siehe handleInput() Taste L)
 static bool loraTxWasOn = false;
 static uint32_t aprsBeaconNextMs = 0;
 static double aprsBeaconLastLat = 0, aprsBeaconLastLon = 0;   // Position beim letzten Beacon-Sendeversuch (fuer die
@@ -1471,6 +1678,17 @@ static void logTimestamp(char *b, size_t n) {
   snprintf(b, n, "%02d.%02d.%04d %02d:%02d:%02d", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
 }
 
+// Kompakter Zeitstempel (tt.mm. hh:mm, ohne Jahr/Sekunden) fuer Meldungen mit wenig Platz, z. B. den
+// "Position gesendet"-Toast (siehe toastText[48] in handleInput()) -- "Zeit unbekannt", solange noch keine
+// Uhrzeit (GPS/NTP) vorliegt.
+static void shortDateTime(char *b, size_t n) {
+  if (!timeSet) { snprintf(b, n, "Zeit unbekannt"); return; }
+  time_t t = time(nullptr);
+  struct tm tmv;
+  localtime_r(&t, &tmv);
+  snprintf(b, n, "%02d.%02d. %02d:%02d", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_hour, tmv.tm_min);
+}
+
 // Systemzeit wurde gerade gesetzt (per GPS oder NTP): einmalig die aktuelle Logdatei (bis dahin der
 // Platzhaltername rs41_log_NN.txt aus startLog(), weil beim Anlegen noch keine Uhrzeit vorlag) auf den
 // Namen mit Datum/Zeit umbenennen, dann loggen und den SD-Zeitstempel der Datei nachtragen (stand bisher
@@ -1505,6 +1723,15 @@ static void onTimeSet(const char *src) {
     snprintf(m, sizeof(m), "### Zeit gesetzt (%s): %s", src, t);
     logLine(m);
   }
+  // Feature v4.92: gpxEnsureIchId() (GPX-Track-Fortsetzung, siehe GPX_RESUME_GRACE_S/GPX_RESUME_ASK_S) hing
+  // bisher daran, dass die GGA/RMC-Zeile auch tatsaechlich einen neuen GPS-FIX lieferte -- ausgerechnet in
+  // Gebaeuden (schlechter GPS-Empfang, der ganze Anlass fuer dieses Feature) kann das lange dauern oder ganz
+  // ausbleiben, obwohl die Uhrzeit laengst per NTP ueber WLAN feststeht. Jetzt wird gleich hier versucht, sobald
+  // ueberhaupt eine Uhrzeit vorliegt (GPS ODER NTP) -- unabhaengig davon, ob/wann ein Fix dazukommt. Zeigt bei
+  // Bedarf confirmGpxResumeAsk() an; die ruft bewusst KEIN gpsPoll() mehr auf (siehe dort), weil onTimeSet() bei
+  // der Quelle "GPS" selbst schon aus der NMEA-Verarbeitung (also letztlich aus gpsPoll()) heraus aufgerufen
+  // wird -- ein gpsPoll() von dort aus haette sich selbst verschachtelt aufgerufen.
+  gpxEnsureIchId();
 }
 
 // Schaltet das SD-Log waehrend des laufenden Betriebs ein (Menue P/Taste P oder Webseite): startLog() lief
@@ -2310,14 +2537,25 @@ static bool gpxEnsureIchId() {
   if (gpxIchId[0]) return true;
   if (!timeSet) return false;
   time_t t = time(nullptr);
-  if (gpxResumeId[0] && gpxResumeTs > 0 && t >= (time_t)gpxResumeTs && (uint32_t)(t - gpxResumeTs) <= GPX_RESUME_GRACE_S) {
-    strncpy(gpxIchId, gpxResumeId, sizeof(gpxIchId) - 1); gpxIchId[sizeof(gpxIchId) - 1] = 0;
-    strncpy(gpxIchName, gpxResumeName, sizeof(gpxIchName) - 1); gpxIchName[sizeof(gpxIchName) - 1] = 0;
-    char m[96];
-    snprintf(m, sizeof(m), "GPX: Track %s fortgesetzt (Neustart %lu s zuvor)", gpxIchId, (unsigned long)(t - gpxResumeTs));
-    logLine(m);
-    gpxReloadOwnTrailTail();          // letzte Punkte zurueck in ownLat[]/ownLon[], siehe dort
-    return true;
+  if (gpxResumeId[0] && gpxResumeTs > 0 && t >= (time_t)gpxResumeTs) {
+    uint32_t ageS = (uint32_t)(t - gpxResumeTs);
+    // Feature v4.90: laenger abwesend gewesen (z. B. Geraet bewusst im Gebaeude ausgeschaltet, schlechter
+    // GPS-Empfang dort) als die kurze, stillschweigende Karenzzeit (GPX_RESUME_GRACE_S), aber noch nicht
+    // aelter als GPX_RESUME_ASK_S (Default 24 h, siehe settings.h) -- dann blockierend nachfragen, statt
+    // entweder stillschweigend fortzusetzen (koennte ein voellig anderer Ort/Anlass sein) oder stillschweigend
+    // einen neuen Track anzulegen (koennte denselben, nur unterbrochenen Fundgang zerreissen).
+    bool resume = (ageS <= GPX_RESUME_GRACE_S) ? true
+                : (ageS <= GPX_RESUME_ASK_S) ? confirmGpxResumeAsk(ageS)
+                : false;
+    if (resume) {
+      strncpy(gpxIchId, gpxResumeId, sizeof(gpxIchId) - 1); gpxIchId[sizeof(gpxIchId) - 1] = 0;
+      strncpy(gpxIchName, gpxResumeName, sizeof(gpxIchName) - 1); gpxIchName[sizeof(gpxIchName) - 1] = 0;
+      char m[96];
+      snprintf(m, sizeof(m), "GPX: Track %s fortgesetzt (Neustart %lu s zuvor)", gpxIchId, (unsigned long)ageS);
+      logLine(m);
+      gpxReloadOwnTrailTail();          // letzte Punkte zurueck in ownLat[]/ownLon[], siehe dort
+      return true;
+    }
   }
   struct tm tmv;
   localtime_r(&t, &tmv);
@@ -2616,10 +2854,49 @@ static int batPercent(float v) {       // typische LiPo-Entladekurve, unten per 
   return 0;
 }
 
+// Feature v4.94 (Wunsch Okt. 2026, "schwarzen Untergrund der Uhr und Batterie auf 75% Transparenz legen"):
+// raeumt den Hintergrund fuer Batterie/GPS/Uhrzeit frei -- statt blickdichtem Schwarz wird das darunterliegende
+// Kartenbild anteilig durchgemischt (STATUS_BG_TRANSPARENCY_PCT in settings.h, 0 = blickdicht wie vorher, 100 =
+// gar kein Untergrund mehr). Nur moeglich, wenn direkt in den GFXcanvas16-Bildpuffer (frameCanvas) gezeichnet
+// wird -- Pixel lassen sich dort einfach zurueckrechnen/mischen; beim seltenen Ruckfall auf den TFT-Treiber
+// direkt (kein PSRAM, siehe scr()) gibt es dafuer keine praktikable Moeglichkeit (SPI-Rueckleseoperationen
+// waeren viel zu langsam) -- dort bleibt es bei blickdichtem Schwarz. Unschaedlich bei wiederholten Aufrufen
+// ohne zwischenzeitliche Neuzeichnung (z. B. Textansicht/Menue): deren Hintergrund an dieser Stelle ist ohnehin
+// reines Schwarz, und Schwarz * Faktor bleibt Schwarz -- kein "Aufdunkeln" durch mehrfaches Ueberblenden. In der
+// Kartenansicht wird frameCanvas sowieso jeden Frame komplett neu aufgebaut, bevor diese Funktion laeuft (siehe
+// prepareMapBackground()/drawLoraPause()).
+static void statusBgFill(Adafruit_GFX *g, int x, int y, int w, int h) {
+  if (g != (Adafruit_GFX *)frameCanvas || !frameCanvas || STATUS_BG_TRANSPARENCY_PCT <= 0) {
+    g->fillRect(x, y, w, h, ST77XX_BLACK);
+    return;
+  }
+  if (STATUS_BG_TRANSPARENCY_PCT >= 100) return;    // "kein Untergrund" -- Kartenbild unveraendert durchscheinen lassen
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > 320) w = 320 - x;
+  if (y + h > 240) h = 240 - y;
+  if (w <= 0 || h <= 0) return;
+  uint16_t *buf = frameCanvas->getBuffer();
+  for (int row = 0; row < h; row++) {
+    uint16_t *p = buf + (size_t)(y + row) * 320 + x;
+    for (int col = 0; col < w; col++, p++) {
+      uint16_t c = *p;
+      uint16_t r  = (uint16_t)(((c >> 11) & 0x1F) * STATUS_BG_TRANSPARENCY_PCT / 100);
+      uint16_t gg = (uint16_t)(((c >> 5) & 0x3F) * STATUS_BG_TRANSPARENCY_PCT / 100);
+      uint16_t b  = (uint16_t)((c & 0x1F) * STATUS_BG_TRANSPARENCY_PCT / 100);
+      *p = (uint16_t)((r << 11) | (gg << 5) | b);
+    }
+  }
+}
+
 // Batteriesymbol mit Prozentzahl (oder "USB") und Blitz beim Laden; funktioniert auf Display und Bildpuffer
 static void drawBattery(Adafruit_GFX *g, int x, int y) {
   if (batV <= 0) return;
-  g->fillRect(x - 2, y - 1, 322 - x, 12, ST77XX_BLACK);
+  statusBgFill(g, x - 2, y - 1, 322 - x, 13);   // BUG behoben (v4.94): Hoehe war 12 (bis y+10), drawGps() faengt
+                                                 // aber erst bei y+12 an -- Zeile y+11 dazwischen wurde nie
+                                                 // geraeumt (irritierende helle Pixelzeile zwischen Batterie und
+                                                 // GPS, je nach Kartenuntergrund). Jetzt 13 (bis y+11), luecken-
+                                                 // los an drawGps() anschliessend.
   g->drawRect(x, y, 22, 10, ST77XX_WHITE);
   g->fillRect(x + 22, y + 3, 2, 4, ST77XX_WHITE);
   uint16_t col = (batPct < 0) ? ST77XX_CYAN : (batPct > 50 ? ST77XX_GREEN : (batPct > 20 ? ST77XX_YELLOW : ST77XX_RED));
@@ -2647,7 +2924,7 @@ static void drawGps(Adafruit_GFX *g, int x, int y) {
   char t[12];
   if (alive) snprintf(t, sizeof(t), "GPS %d", gps.sats);
   else snprintf(t, sizeof(t), "GPS --");
-  g->fillRect(x - 2, y, 322 - x, 9, ST77XX_BLACK);
+  statusBgFill(g, x - 2, y, 322 - x, 9);
   g->setTextSize(1);
   g->setTextColor(col);
   g->setCursor(x, y);
@@ -2659,15 +2936,93 @@ static void drawGps(Adafruit_GFX *g, int x, int y) {
   }
 }
 
-// Statusblock oben rechts: Batterie und GPS
+// Feature v4.89, seit v4.90 bildschirmfuellend: Countdown + Fortschrittsbalken fuer eine laufende
+// LoRa-Upload-Kurzpause (Taste L, siehe loraPauseUntilMs/loraPauseTick()). Urspruenglich nur klein unter dem
+// Statusblock (Batterie/GPS) -- auf ausdruecklichen Wunsch (Okt. 2026, "damit man das beim Antenne wechseln
+// im Auge behaelt") jetzt stattdessen ueber die GESAMTE Kartenansicht, solange die Pause laeuft: deutlich
+// leichter aus der Entfernung/beim Hantieren mit der Antenne abzulesen als die kleine Ecken-Anzeige vorher.
+// Wird (wie bisher) als allerletztes vor blit(frameCanvas) aufgerufen, ueberschreibt also bewusst die normale
+// Kartenzeichnung dieses Frames -- sobald die Pause vorbei ist, zeichnet der naechste Frame die Karte wieder
+// ganz normal (prepareMapBackground() kopiert/croppt frameCanvas komplett frisch aus bgCanvas/bigCanvas, siehe
+// dort), hier ist dann nichts mehr aufzuraeumen. BUG (behoben in v4.92): hier stand bis v4.91 noch ein
+// fillRect() der ALTEN, kleinen Ecken-Anzeige aus v4.89 -- der blieb beim Umbau auf die bildschirmfuellende
+// Anzeige versehentlich stehen und malte dadurch bei JEDEM Frame ohne laufende Pause ein schwarzes Rechteck
+// mitten in die Karte, wo vorher nur die kleine Anzeige stand. Da frameCanvas (s. o.) ohnehin jeden Frame
+// komplett neu aufgebaut wird, ist ausserhalb einer laufenden Pause hier schlicht nichts zu tun.
+static void drawLoraPause(Adafruit_GFX *g, int x, int y) {
+  (void)x; (void)y;   // Position/Groesse sind jetzt fest (ganzer Bildschirm) -- Parameter nur der Aufrufstellen
+                       // wegen unveraendert, siehe die 4 drawLoraPause(frameCanvas, 264, 25)-Stellen
+  if (gfxView != 0) return;    // nur in der Kartenansicht -- im Hoehentrack/Stationsliste (gfxView 1) wuerde das
+                                // die Listenzeilen ueberdecken; dort braucht es den Hinweis auch nicht (Feature-
+                                // Wunsch war ausdruecklich "in der Kartenansicht")
+  if (!loraPauseUntilMs) return;
+  int32_t remainMs = (int32_t)(loraPauseUntilMs - millis());
+  if (remainMs < 0) remainMs = 0;
+  int remainS = (remainMs + 999) / 1000;                // aufgerundet (zeigt z. B. schon "1:00" direkt nach dem Start)
+  bool warn = remainS <= LORA_PAUSE_WARN_S;
+  uint16_t col = warn ? ST77XX_RED : ST77XX_ORANGE;
+  g->fillScreen(ST77XX_BLACK);
+  g->setTextWrap(false);
+  g->setTextSize(2);
+  g->setTextColor(ST77XX_YELLOW);
+  g->setCursor(10, 16);
+  g->print("LoRa Upload pausiert");
+  char t[8];
+  snprintf(t, sizeof(t), "%d:%02d", remainS / 60, remainS % 60);
+  g->setTextSize(8);
+  g->setTextColor(col);
+  int tw = (int)strlen(t) * 48;                         // Zeichenbreite bei Schriftgroesse 8: 6 px * 8
+  g->setCursor((320 - tw) / 2, 80);
+  g->print(t);
+  g->drawRect(10, 190, 300, 32, ST77XX_WHITE);
+  int fill = (int)(((long)remainMs * 296L) / (long)LORA_PAUSE_MS);
+  if (fill < 0) fill = 0; else if (fill > 296) fill = 296;
+  if (fill > 0) g->fillRect(12, 192, fill, 28, col);
+  g->setTextSize(1);                                    // Feature v4.94: Hinweis auf den vorzeitigen Abbruch,
+  g->setTextColor(0x8410);                               // direkt unter dem Balken -- sonst ist von aussen nicht
+  g->setCursor(10, 226);                                 // zu erkennen, dass die Ruecktaste das kann
+  g->print("Ruecktaste: Pause sofort beenden");
+}
+
+// Feature v4.90 (Wunsch Okt. 2026, "unter der GPS-Anzeige die aktuelle Uhrzeit mit Datum, falls wir das haben"),
+// seit v4.92 zweizeilig (Wunsch: "Datum und Uhrzeit untereinander, Datum unten"): Uhrzeit (hh:mm:ss, seit v4.93
+// mit Sekunden) oben, Datum (tt.mm.jj) darunter, direkt unter dem GPS-Status, sobald sie per GPS/NTP feststeht
+// (timeSet) -- vorher einfach leer, keine Platzhalter-Striche noetig. Zweizeilig statt der urspruenglichen
+// einzeiligen Fassung, damit beide Zeilen in dieselbe schmale Spalte wie Batterie/GPS passen (x wie dort, kein
+// Extra-Platz noetig) -- das Jahr zweistellig, damit "tt.mm.jj" (8 Zeichen) bei Schriftgroesse 1 sicher in die
+// ca. 56 px breite Spalte passt, ohne am rechten Bildschirmrand abgeschnitten zu werden (die vierstellige
+// Fassung tat das, siehe Bug-Meldung Okt. 2026). Die Sekunden kosten praktisch nichts extra: die Zeile wird
+// ohnehin bei jedem Kartenbild (mehrmals pro Sekunde) neu gezeichnet, ein Zeichen mehr im String aendert daran
+// nichts Messbares.
+static void drawClock(Adafruit_GFX *g, int x, int y) {
+  statusBgFill(g, x - 2, y, 322 - x, 18);
+  if (!timeSet) return;
+  time_t t = time(nullptr);
+  struct tm tmv;
+  localtime_r(&t, &tmv);
+  char tTime[12], tDate[10];
+  snprintf(tTime, sizeof(tTime), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+  snprintf(tDate, sizeof(tDate), "%02d.%02d.%02d", tmv.tm_mday, tmv.tm_mon + 1, (tmv.tm_year + 1900) % 100);
+  g->setTextSize(1);
+  g->setTextColor(ST77XX_WHITE);
+  g->setCursor(x, y);
+  g->print(tTime);
+  g->setCursor(x, y + 9);
+  g->print(tDate);
+}
+
+// Statusblock oben rechts: Batterie, GPS und (Feature v4.90) Uhrzeit/Datum
 static void drawStatus(Adafruit_GFX *g, int x, int y) {
   drawBattery(g, x, y);
   drawGps(g, x, y + 12);
+  drawClock(g, x, y + 21);
 }
 
 static void statusRefresh() {                          // Statusblock im Bildpuffer neu zeichnen und aufs Display kopieren
-  drawStatus(scr(), 264, 1);
-  scrFlush(262, 0, 58, 24);
+  drawStatus(scr(), 270, 1);
+  scrFlush(268, 0, 52, 40);   // Feature v4.94: x/Breite an den um 1 Zeichen nach rechts verschobenen Statusblock
+                              // angepasst (vorher 262,58 fuer x=264, jetzt x=270). Hoehe (v4.90/v4.92) deckt die
+                              // zweizeilige Uhrzeit/Datum-Anzeige unter GPS ab
 }
 
 // Alle 3 s messen (16 Werte gemittelt, geglaettet), im Textbild das Symbol aktualisieren
@@ -3571,8 +3926,8 @@ static void idleMapUpdate() {
     }
     else snprintf(l1, sizeof(l1), "Keine Sonde empfangen   z%.1f %s%s", viewZ, styleShort[mapStyle % NSTYLE], mapManual ? " man" : "");
     snprintf(l2, sizeof(l2), "Ich: %.5f %.5f  %s", hLat, hLon, gpsFix ? "GPS" : "letzte Position");
-    if (radioMode == 1 && loraTxOn) snprintf(l3, sizeof(l3), "LoRa-APRS %.3f MHz | Eigenes Symbol: %s", APRS_FREQ_MHZ, aprsSymbolNames[aprsSymbolIdx % NSYMBOL]);
-    else if (radioMode == 1) snprintf(l3, sizeof(l3), "Empfang: LoRa-APRS %.3f MHz", APRS_FREQ_MHZ);
+    if (radioMode == 1 && loraTxOn) snprintf(l3, sizeof(l3), "LoRa-APRS %.3f MHz | Eigenes Symbol: %s", loraFreqMHz, aprsSymbolNames[aprsSymbolIdx % NSYMBOL]);
+    else if (radioMode == 1) snprintf(l3, sizeof(l3), "Empfang: LoRa-APRS %.3f MHz", loraFreqMHz);
     else if (fixedFreq) snprintf(l3, sizeof(l3), "Empfang: feste Frequenz %.3f MHz", freqMHz);
     else snprintf(l3, sizeof(l3), "Empfang: Suchlauf 400-406 MHz");
     frameCanvas->fillRect(0, 205, 320, 35, ST77XX_BLACK);
@@ -3587,7 +3942,8 @@ static void idleMapUpdate() {
     frameCanvas->print(l3);
   }
   drawToast(frameCanvas);
-  drawStatus(frameCanvas, 264, 1);
+  drawStatus(frameCanvas, 270, 1);
+  drawLoraPause(frameCanvas, 264, 25);   // Feature v4.88/v4.89/v4.91: Pause-Countdown/-Balken (Taste L, seit v4.91 bildschirmfuellend), siehe dort
   blit(frameCanvas);
   lastMapMs = millis() - t0;
 }
@@ -3722,7 +4078,8 @@ static void mapUpdate() {
     frameCanvas->print(l3);
   }
   drawToast(frameCanvas);
-  drawStatus(frameCanvas, 264, 1);
+  drawStatus(frameCanvas, 270, 1);
+  drawLoraPause(frameCanvas, 264, 25);   // Feature v4.88/v4.89/v4.91: Pause-Countdown/-Balken (Taste L, seit v4.91 bildschirmfuellend), siehe dort
   blit(frameCanvas);
   lastMapMs = millis() - t0;
   VLOG("Karte aktualisiert in %lu ms (%s, %03.0f Grad)\n", (unsigned long)lastMapMs, d, brg);
@@ -3928,7 +4285,8 @@ static void altTrackUpdate() {
     }
   }
   drawToast(frameCanvas);
-  drawStatus(frameCanvas, 264, 1);
+  drawStatus(frameCanvas, 270, 1);
+  drawLoraPause(frameCanvas, 264, 25);   // Feature v4.88/v4.89/v4.91: Pause-Countdown/-Balken (Taste L, seit v4.91 bildschirmfuellend), siehe dort
   blit(frameCanvas);
 }
 
@@ -4030,7 +4388,8 @@ static void satRadarUpdate() {
   else if (fresh > shown) { char more[20]; snprintf(more, sizeof(more), "+%d weitere", fresh - shown); frameCanvas->print(more); }
 
   drawToast(frameCanvas);
-  drawStatus(frameCanvas, 264, 1);
+  drawStatus(frameCanvas, 270, 1);
+  drawLoraPause(frameCanvas, 264, 25);   // Feature v4.88/v4.89/v4.91: Pause-Countdown/-Balken (Taste L, seit v4.91 bildschirmfuellend), siehe dort
   blit(frameCanvas);
 }
 
@@ -4348,6 +4707,10 @@ static void loadSettings() {
   if (radioMode == 1 && savedView == 0) savedView = 1;     // LoRa-Modus: Textansicht (Frequenzscan) gibt's nicht -> auf Karte ausweichen
   txPowerDbm = (int8_t)constrain((int)prefs.getChar("txpwr", 10), -9, 22);   // Menue U (LoRa-Beacon-Sendeleistung)
   loraTxWasOn = prefs.getBool("loratx", false);            // siehe confirmLoraTxResume() in setup()
+  loraFreqMHz = prefs.getFloat("lfreq", APRS_FREQ_MHZ);    // Menue F/B/D/N im LoRa-Modus (Feature v4.87)
+  loraBwKHz   = prefs.getFloat("lbw", APRS_BW_KHZ);
+  loraSf      = (uint8_t)constrain((int)prefs.getUChar("lsf", APRS_SF), 6, 12);
+  loraCr      = (uint8_t)constrain((int)prefs.getUChar("lcr", APRS_CR), 5, 8);
   {
     String rid = prefs.getString("gpxrid", "");
     strncpy(gpxResumeId, rid.c_str(), sizeof(gpxResumeId) - 1);
@@ -4379,6 +4742,292 @@ static void saveSettings() {
   prefs.putUChar("rmode", radioMode);
   prefs.putChar("txpwr", txPowerDbm);
   prefs.putBool("loratx", loraTxOn);                       // siehe confirmLoraTxResume() in setup()
+  prefs.putFloat("lfreq", loraFreqMHz);                    // Menue F/B/D/N im LoRa-Modus (Feature v4.87)
+  prefs.putFloat("lbw", loraBwKHz);
+  prefs.putUChar("lsf", loraSf);
+  prefs.putUChar("lcr", loraCr);
+}
+
+// ========================================================================================================
+// Laufzeit-Einstellungen als INI-Datei auf der SD-Karte (Feature v4.95, Wunsch Okt. 2026: "settings auch
+// als ini ins dateisystem machen, updatebar per upload"). Ergaenzt settings.h/Preferences -- siehe Kopf von
+// settings.h fuer die Abgrenzung: nur dort mit "-- CFG:" markierte Werte sind hier erreichbar (Timings,
+// Schwellwerte, Farben, Transparenz, Toene; NICHT Pins, Funkprotokoll-Parameter, RS41-Scan-Parameter oder
+// Puffer-/Array-Groessen). Format je Zeile: NAME=WERT, Zeilen mit # oder ; sind Kommentare. Farben (COL_...)
+// duerfen als normales RGB888 (0xRRGGBB, wie in jedem Colorpicker) oder dezimal angegeben werden.
+// ========================================================================================================
+#define CFG_INI_PATH "/config.ini"
+
+enum CfgType : uint8_t { CFG_U32, CFG_I32, CFG_FLOAT, CFG_DOUBLE, CFG_U16 };
+
+struct CfgEntry {
+  const char *name;
+  CfgType type;
+  void *ptr;
+  double lo, hi;   // Feature v4.95 (Wunsch Okt. 2026, "Eingabe veraendert den Wert mit Plausibilitaetspruefung"):
+                   // Grenzen fuer den Mini-Editor auf dem Geraet selbst (cfgMenu(), siehe weiter unten) --
+                   // Farben (CFG_U16) werden dabei als RGB888 gegen 0..0xFFFFFF geprueft (wie beim Anzeigen/
+                   // Eingeben), nicht als RGB565. Wirkt NUR im On-Device-Editor, nicht beim Speichern/Hochladen
+                   // per Weboberflaeche (dort weiterhin nur eine Typ-/Lesbarkeitspruefung, siehe applyConfigValue()).
+};
+
+// Manuelle Vorab-Deklarationen fuer die drei Funktionen, deren Signatur CfgEntry/CfgType als Parameter nimmt
+// (cfgFormatValue()/cfgParseRaw()/cfgApplyRaw(), weiter unten definiert): OHNE das wuerde Arduino automatisch
+// einen Prototyp ganz am Dateianfang einfuegen (noch VOR dieser struct/enum-Definition hier), was mit genau
+// dem Fehler "'CfgEntry' does not name a type" nicht compiliert -- derselbe Grund-Mechanismus wie bei globalen
+// Variablen, die vor ihrer ersten Verwendung deklariert sein muessen (siehe Kommentar zu drawFixedPanel() an
+// anderer Stelle), nur eben fuer Funktions-Parametertypen statt fuer Variablen.
+static void cfgFormatValue(const CfgEntry &e, char *buf, size_t n);
+static bool cfgParseRaw(CfgType type, const String &text, double &out);
+static void cfgApplyRaw(const CfgEntry &e, double v);
+
+// Reihenfolge wie in settings.h, damit die erzeugte/heruntergeladene Datei denselben Abschnitten folgt.
+static const CfgEntry CFG_REGISTRY[] = {
+  { "WIFI_LOST_MS", CFG_U32, &WIFI_LOST_MS, 0, 600000 },
+  { "WIFI_IDLE_OFF_MS", CFG_U32, &WIFI_IDLE_OFF_MS, 0, 3600000 },
+  { "WIFI_BOOT_HOME_TIMEOUT_MS", CFG_U32, &WIFI_BOOT_HOME_TIMEOUT_MS, 0, 600000 },
+  { "WIFI_BOOT_AP_MS", CFG_U32, &WIFI_BOOT_AP_MS, 0, 3600000 },
+  { "NTP_TIMEOUT_MS", CFG_U32, &NTP_TIMEOUT_MS, 500, 60000 },
+  { "BOOT_SPLASH_MS", CFG_U32, &BOOT_SPLASH_MS, 0, 20000 },
+  { "TOAST_MS_DEFAULT", CFG_U32, &TOAST_MS_DEFAULT, 200, 20000 },
+  { "TOAST_MS_LONG", CFG_U32, &TOAST_MS_LONG, 200, 60000 },
+  { "MENU_NOTE_MS", CFG_U32, &MENU_NOTE_MS, 200, 20000 },
+  { "COL_SONDE_OK", CFG_U16, &COL_SONDE_OK, 0, 16777215 },
+  { "COL_SONDE_LATE", CFG_U16, &COL_SONDE_LATE, 0, 16777215 },
+  { "COL_SONDE_LOST", CFG_U16, &COL_SONDE_LOST, 0, 16777215 },
+  { "COL_SONDE_RING", CFG_U16, &COL_SONDE_RING, 0, 16777215 },
+  { "COL_SONDE_RING_SIG", CFG_U16, &COL_SONDE_RING_SIG, 0, 16777215 },
+  { "SONDE_SIGNAL_FLASH_MS", CFG_U32, &SONDE_SIGNAL_FLASH_MS, 0, 10000 },
+  { "COL_ICH_FILL", CFG_U16, &COL_ICH_FILL, 0, 16777215 },
+  { "COL_ICH_RING", CFG_U16, &COL_ICH_RING, 0, 16777215 },
+  { "COL_LINE", CFG_U16, &COL_LINE, 0, 16777215 },
+  { "COL_OWN_TRAIL", CFG_U16, &COL_OWN_TRAIL, 0, 16777215 },
+  { "COL_TRAIL", CFG_U16, &COL_TRAIL, 0, 16777215 },
+  { "COL_PRED", CFG_U16, &COL_PRED, 0, 16777215 },
+  { "COL_PRED_ONLINE", CFG_U16, &COL_PRED_ONLINE, 0, 16777215 },
+  { "CROSS_HALF", CFG_I32, &CROSS_HALF, 1, 40 },
+  { "COL_RADAR_RING", CFG_U16, &COL_RADAR_RING, 0, 16777215 },
+  { "COL_RADAR_TEXT", CFG_U16, &COL_RADAR_TEXT, 0, 16777215 },
+  { "COL_ALT_FILL", CFG_U16, &COL_ALT_FILL, 0, 16777215 },
+  { "COL_APRS_DIRECT", CFG_U16, &COL_APRS_DIRECT, 0, 16777215 },
+  { "COL_APRS_IGATE", CFG_U16, &COL_APRS_IGATE, 0, 16777215 },
+  { "COL_APRS_DIGI", CFG_U16, &COL_APRS_DIGI, 0, 16777215 },
+  { "COL_BOOT_CALLSIGN", CFG_U16, &COL_BOOT_CALLSIGN, 0, 16777215 },
+  { "STATUS_BG_TRANSPARENCY_PCT", CFG_I32, &STATUS_BG_TRANSPARENCY_PCT, 0, 100 },
+  { "BAT_SCALE", CFG_FLOAT, &BAT_SCALE, 0.5, 5.0 },
+  { "BAT_OFFSET", CFG_FLOAT, &BAT_OFFSET, -2.0, 2.0 },
+  { "BAT_USB_V", CFG_FLOAT, &BAT_USB_V, 3.0, 5.0 },
+  { "KB_LEVEL", CFG_I32, &KB_LEVEL, 0, 255 },
+  { "KB_LEVEL_DIM", CFG_I32, &KB_LEVEL_DIM, 0, 255 },
+  { "KB_ON_MS", CFG_U32, &KB_ON_MS, 0, 60000 },
+  { "KB_BRIGHT_MS", CFG_U32, &KB_BRIGHT_MS, 0, 60000 },
+  { "KB_DARK_ELEV", CFG_DOUBLE, &KB_DARK_ELEV, -90.0, 90.0 },
+  { "FILTER_FOREIGN_BLOCK_MS", CFG_U32, &FILTER_FOREIGN_BLOCK_MS, 0, 600000 },
+  { "FILTER_FOREIGN_BLOCK_UNK_MS", CFG_U32, &FILTER_FOREIGN_BLOCK_UNK_MS, 0, 600000 },
+  { "FILTER_UNKNOWN_RETRY_N", CFG_I32, &FILTER_UNKNOWN_RETRY_N, 1, 100 },
+  { "GPS_MAX_SPEED_MS", CFG_FLOAT, &GPS_MAX_SPEED_MS, 1.0, 300.0 },
+  { "GPS_JUMP_MARGIN_M", CFG_FLOAT, &GPS_JUMP_MARGIN_M, 0.0, 1000.0 },
+  { "GPS_GLITCH_TIMEOUT_MS", CFG_U32, &GPS_GLITCH_TIMEOUT_MS, 0, 600000 },
+  { "GPS_FILTER_MAX_HDOP", CFG_FLOAT, &GPS_FILTER_MAX_HDOP, 0.1, 20.0 },
+  { "GPS_FILTER_MIN_SATS", CFG_I32, &GPS_FILTER_MIN_SATS, 0, 32 },
+  { "GPS_ALT_JUMP_M", CFG_FLOAT, &GPS_ALT_JUMP_M, 0.0, 1000.0 },
+  { "GPS_ALT_GLITCH_TIMEOUT_MS", CFG_U32, &GPS_ALT_GLITCH_TIMEOUT_MS, 0, 600000 },
+  { "GPS_SEND_MIN_SATS", CFG_I32, &GPS_SEND_MIN_SATS, 0, 32 },
+  { "GPS_SEND_MAX_HDOP", CFG_FLOAT, &GPS_SEND_MAX_HDOP, 0.1, 20.0 },
+  { "SAT_TIMEOUT_MS", CFG_U32, &SAT_TIMEOUT_MS, 1000, 60000 },
+  { "PRED_MIN_SINK", CFG_DOUBLE, &PRED_MIN_SINK, 0.0, 20.0 },
+  { "PRED_SMOOTH_IN_ALPHA", CFG_FLOAT, &PRED_SMOOTH_IN_ALPHA, 0.0, 1.0 },
+  { "PRED_SMOOTH_OUT_ALPHA", CFG_FLOAT, &PRED_SMOOTH_OUT_ALPHA, 0.0, 1.0 },
+  { "KEEP_RECENT_KM", CFG_FLOAT, &KEEP_RECENT_KM, 0.0, 100.0 },
+  { "TAWHIRI_RETRY_MS", CFG_U32, &TAWHIRI_RETRY_MS, 1000, 1800000 },
+  { "TAWHIRI_RETRY_FAST_MS", CFG_U32, &TAWHIRI_RETRY_FAST_MS, 1000, 1800000 },
+  { "TAWHIRI_FAST_ALT_M", CFG_DOUBLE, &TAWHIRI_FAST_ALT_M, 0.0, 20000.0 },
+  { "TAWHIRI_BURST_ALT_DEFAULT_M", CFG_DOUBLE, &TAWHIRI_BURST_ALT_DEFAULT_M, 1000.0, 45000.0 },
+  { "TAWHIRI_FALLBACK_VZ0", CFG_DOUBLE, &TAWHIRI_FALLBACK_VZ0, 0.0, 50.0 },
+  { "TAWHIRI_MAX_SONDE_AGE_MS", CFG_U32, &TAWHIRI_MAX_SONDE_AGE_MS, 0, 3600000 },
+  { "DRAFT_IDLE_MS", CFG_U32, &DRAFT_IDLE_MS, 200, 30000 },
+  { "GPX_RESUME_GRACE_S", CFG_U32, &GPX_RESUME_GRACE_S, 0, 3600 },
+  { "GPX_RESUME_ASK_S", CFG_U32, &GPX_RESUME_ASK_S, 0, 172800 },
+  { "GPX_RESUME_ASK_MS", CFG_U32, &GPX_RESUME_ASK_MS, 1000, 120000 },
+  { "GPX_FLUSH_MS", CFG_U32, &GPX_FLUSH_MS, 1000, 300000 },
+  { "APRS_MAX_AGE_MS", CFG_U32, &APRS_MAX_AGE_MS, 0, 7200000 },
+  { "OWN_SPEED_BIG_KMH", CFG_FLOAT, &OWN_SPEED_BIG_KMH, 0.0, 200.0 },
+  { "APRS_BEACON_SLOW_MS", CFG_U32, &APRS_BEACON_SLOW_MS, 1000, 3600000 },
+  { "APRS_BEACON_MED_MS", CFG_U32, &APRS_BEACON_MED_MS, 1000, 3600000 },
+  { "APRS_BEACON_FAST_MS", CFG_U32, &APRS_BEACON_FAST_MS, 1000, 3600000 },
+  { "APRS_BEACON_DIST_WALK_M", CFG_DOUBLE, &APRS_BEACON_DIST_WALK_M, 0.0, 10000.0 },
+  { "APRS_BEACON_DIST_FAST_M", CFG_DOUBLE, &APRS_BEACON_DIST_FAST_M, 0.0, 10000.0 },
+  { "APRS_BEACON_RETRY_MS", CFG_U32, &APRS_BEACON_RETRY_MS, 1000, 60000 },
+  { "APRS_SYMBOL_HYST_MS", CFG_U32, &APRS_SYMBOL_HYST_MS, 0, 600000 },
+  { "LORA_PAUSE_MS", CFG_U32, &LORA_PAUSE_MS, 1000, 600000 },
+  { "LORA_PAUSE_WARN_S", CFG_I32, &LORA_PAUSE_WARN_S, 0, 60 },
+  { "LORA_PAUSE_WARN_HZ", CFG_I32, &LORA_PAUSE_WARN_HZ, 100, 8000 },
+  { "LORA_TXRESUME_ASK_MS", CFG_U32, &LORA_TXRESUME_ASK_MS, 1000, 120000 },
+  { "BEEP_HZ", CFG_I32, &BEEP_HZ, 100, 8000 },
+  { "BEEP_HZ_NEU_DIREKT", CFG_I32, &BEEP_HZ_NEU_DIREKT, 100, 8000 },
+  { "BEEP_HZ_NEU_REPEATED", CFG_I32, &BEEP_HZ_NEU_REPEATED, 100, 8000 },
+  { "RECOVERY_RETRY_MS", CFG_U32, &RECOVERY_RETRY_MS, 1000, 600000 },
+  { "RECOVERY_DRAIN_GAP_MS", CFG_U32, &RECOVERY_DRAIN_GAP_MS, 0, 60000 },
+  { "SONDEHUB_LISTENER_CHECK_MS", CFG_U32, &SONDEHUB_LISTENER_CHECK_MS, 1000, 600000 },
+  { "SONDEHUB_LISTENER_STATIC_RETRY_MS", CFG_U32, &SONDEHUB_LISTENER_STATIC_RETRY_MS, 1000, 3600000 },
+  { "SONDEHUB_MOVE_THRESHOLD_M", CFG_DOUBLE, &SONDEHUB_MOVE_THRESHOLD_M, 0.0, 1000.0 },
+  { "TBLOCK_DOUBLE_TAP_MS", CFG_U32, &TBLOCK_DOUBLE_TAP_MS, 200, 5000 },
+};
+#define CFG_REGISTRY_N (sizeof(CFG_REGISTRY) / sizeof(CFG_REGISTRY[0]))
+
+// Werkseinstellungen (Wunsch Okt. 2026, "wenn die Werte komplett daneben sind und ich nicht weiss, wie sie
+// waren"): ein Schattenarray merkt sich die Compile-Defaults aus settings.h EINMALIG beim Start (siehe
+// cfgCaptureDefaults(), ganz am Anfang von setup() aufgerufen -- noch bevor applyConfigIniFromSd() die evtl.
+// per Web gespeicherten Werte druebersetzt), damit sie spaeter per Webformular wiederhergestellt werden
+// koennen, auch ohne Neustart. double reicht als gemeinsamer Zwischentyp verlustfrei fuer alle hier
+// vorkommenden Typen (32-Bit-Ganzzahlen/-Gleitkomma, 16-Bit-Farben).
+static double CFG_DEFAULTS[CFG_REGISTRY_N];
+
+static void cfgCaptureDefaults() {
+  for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
+    const CfgEntry &e = CFG_REGISTRY[i];
+    switch (e.type) {
+      case CFG_U32:    CFG_DEFAULTS[i] = *(uint32_t *)e.ptr; break;
+      case CFG_I32:    CFG_DEFAULTS[i] = *(int *)e.ptr; break;
+      case CFG_FLOAT:  CFG_DEFAULTS[i] = *(float *)e.ptr; break;
+      case CFG_DOUBLE: CFG_DEFAULTS[i] = *(double *)e.ptr; break;
+      case CFG_U16:    CFG_DEFAULTS[i] = *(uint16_t *)e.ptr; break;
+    }
+  }
+}
+
+// Schreibt CFG_DEFAULTS[] zurueck in die lebenden Variablen -- sofort wirksam, kein Neustart noetig.
+static void cfgResetToDefaults() {
+  for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
+    const CfgEntry &e = CFG_REGISTRY[i];
+    switch (e.type) {
+      case CFG_U32:    *(uint32_t *)e.ptr  = (uint32_t)CFG_DEFAULTS[i]; break;
+      case CFG_I32:    *(int *)e.ptr       = (int)CFG_DEFAULTS[i]; break;
+      case CFG_FLOAT:  *(float *)e.ptr     = (float)CFG_DEFAULTS[i]; break;
+      case CFG_DOUBLE: *(double *)e.ptr    = CFG_DEFAULTS[i]; break;
+      case CFG_U16:    *(uint16_t *)e.ptr  = (uint16_t)CFG_DEFAULTS[i]; break;
+    }
+  }
+}
+
+// Farben (CFG_U16) liegen intern als RGB565 (Display-Format), werden aber in config.ini/im Webformular als
+// normales RGB888 (0xRRGGBB) gezeigt/eingegeben (Wunsch Okt. 2026, "ungebraeuchliches Format") -- Hin-Richtung
+// (Eingabe -> intern) macht das RGB()-Makro aus settings.h, hier die Rueck-Richtung fuers Anzeigen.
+static uint32_t rgb565To24(uint16_t v) {
+  uint32_t r8 = ((v >> 11) & 0x1F) << 3, g8 = ((v >> 5) & 0x3F) << 2, b8 = (v & 0x1F) << 3;
+  return (r8 << 16) | (g8 << 8) | b8;
+}
+
+// Setzt genau einen Eintrag (per Name, Gross-/Kleinschreibung egal) auf den geparsten Wert; true = Name
+// gefunden (Wert angewendet -- auch wenn der Text evtl. nicht als Zahl lesbar war, strtod/strtoul liefern
+// dann einfach 0, das faellt beim Pruefen der gespeicherten Datei auf).
+static bool applyConfigValue(const String &name, const String &val) {
+  for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
+    if (name.equalsIgnoreCase(CFG_REGISTRY[i].name)) {
+      const char *v = val.c_str();
+      switch (CFG_REGISTRY[i].type) {
+        case CFG_U32:    *(uint32_t *)CFG_REGISTRY[i].ptr = strtoul(v, nullptr, 0); break;
+        case CFG_I32:    *(int *)CFG_REGISTRY[i].ptr      = (int)strtol(v, nullptr, 0); break;
+        case CFG_FLOAT:  *(float *)CFG_REGISTRY[i].ptr    = strtof(v, nullptr); break;
+        case CFG_DOUBLE: *(double *)CFG_REGISTRY[i].ptr   = strtod(v, nullptr); break;
+        case CFG_U16:    *(uint16_t *)CFG_REGISTRY[i].ptr = RGB(strtoul(v, nullptr, 0)); break;   // Eingabe: RGB888 (0xRRGGBB)
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// Parst den Text einer kompletten config.ini (eine Zeile NAME=WERT je Zeile) und wendet jede erkannte Zeile
+// sofort an. Rueckgabe: Anzahl angewendeter Zeilen; *unknownCount (falls != nullptr) zaehlt Zeilen mit
+// Inhalt, die zu keinem Namen passten (Tippfehler o.ae.) -- fuer die Rueckmeldung im Webformular.
+static int applyConfigText(const String &text, int *unknownCount = nullptr) {
+  int applied = 0, unknown = 0;
+  int pos = 0, len = text.length();
+  while (pos < len) {
+    int nl = text.indexOf('\n', pos);
+    if (nl < 0) nl = len;
+    String line = text.substring(pos, nl);
+    pos = nl + 1;
+    line.trim();
+    if (line.length() == 0 || line[0] == '#' || line[0] == ';') continue;
+    int eq = line.indexOf('=');
+    if (eq < 0) { unknown++; continue; }
+    String name = line.substring(0, eq); name.trim();
+    String val = line.substring(eq + 1); val.trim();
+    if (applyConfigValue(name, val)) applied++; else unknown++;
+  }
+  if (unknownCount) *unknownCount = unknown;
+  return applied;
+}
+
+// Baut den aktuellen Stand aller CFG_REGISTRY-Werte als INI-Text (zum Herunterladen/im Webformular anzeigen) --
+// bewusst ohne die ausfuehrlichen Abschnitts-Kommentare aus settings.h (die stehen nur dort im Quelltext);
+// zusammen mit settings.h im Repo reicht der Name zum Nachschlagen, wofuer ein Wert ist.
+// Formatiert den aktuellen Wert eines Eintrags als Text (Farben als RGB888) -- gemeinsam genutzt von
+// buildConfigIniText() (Webformular/Datei) und cfgMenu() (On-Device-Editor), damit beide exakt gleich
+// aussehen und derselbe Text direkt als Vorbelegung beim Bearbeiten dient.
+static void cfgFormatValue(const CfgEntry &e, char *buf, size_t n) {
+  switch (e.type) {
+    case CFG_U32:    snprintf(buf, n, "%lu", (unsigned long)*(uint32_t *)e.ptr); break;
+    case CFG_I32:    snprintf(buf, n, "%d", *(int *)e.ptr); break;
+    case CFG_FLOAT:  snprintf(buf, n, "%.4g", (double)*(float *)e.ptr); break;
+    case CFG_DOUBLE: snprintf(buf, n, "%.4g", *(double *)e.ptr); break;
+    case CFG_U16:    snprintf(buf, n, "0x%06lX", (unsigned long)rgb565To24(*(uint16_t *)e.ptr)); break;   // Anzeige: RGB888
+  }
+}
+
+static String buildConfigIniText() {
+  String s;
+  s.reserve(4096);
+  s += "; T-Deck RS41 -- Laufzeit-Einstellungen (Feature v4.95)\n";
+  s += "; Format: NAME=WERT, eine Zeile je Wert. Zeilen mit ; oder # werden ignoriert.\n";
+  s += "; Farben (COL_...) als normales RGB888 (0xRRGGBB, wie in jedem Colorpicker) oder dezimal.\n";
+  s += "; Bedeutung der einzelnen Namen siehe settings.h (Kommentare dort, Markierung \"-- CFG:\").\n";
+  s += "; Diese Datei spiegelt den AKTUELLEN Stand (inkl. hier schon mal gespeicherter Aenderungen) --\n";
+  s += "; nicht zwingend die Compile-Defaults aus settings.h.\n\n";
+  for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
+    char buf[32];
+    cfgFormatValue(CFG_REGISTRY[i], buf, sizeof(buf));
+    s += CFG_REGISTRY[i].name; s += '='; s += buf; s += '\n';
+  }
+  return s;
+}
+
+// Liest /config.ini von der SD-Karte und wendet sie an -- einmal beim Start (siehe setup(), kurz nach
+// sdInit(), damit ein zuvor per Web gespeicherter Stand auch einen Neustart uebersteht) und sofort nach
+// jedem Speichern/Hochladen ueber die Weboberflaeche (kein Neustart noetig). Gibt es die Datei noch gar
+// nicht (allererster Start bzw. SD-Karte neu formatiert), wird sie stattdessen einmalig mit den aktuellen
+// (also den Compile-Defaults aus settings.h) Werten NEU ANGELEGT -- Wunsch Okt. 2026: so liegt gleich ein
+// vollstaendiges, kommentiertes Beispiel zum Anschauen/Bearbeiten vor, auch direkt auf der SD-Karte (ohne
+// erst ueber /cfg speichern zu muessen), statt dass /config.ini bis zum ersten Speichern fehlt.
+static void applyConfigIniFromSd() {
+  if (!sdReady) return;
+  if (!SD.exists(CFG_INI_PATH)) {
+    File nf = SD.open(CFG_INI_PATH, FILE_WRITE);
+    if (nf) { nf.print(buildConfigIniText()); nf.close(); logLine("config.ini neu angelegt (Compile-Defaults, noch keine Datei vorgefunden)"); }
+    return;   // frisch geschrieben = Werte entsprechen ohnehin schon den gerade aktiven Compile-Defaults
+  }
+  File f = SD.open(CFG_INI_PATH);
+  if (!f) return;
+  String text = f.readString();
+  f.close();
+  int unknown = 0;
+  int n = applyConfigText(text, &unknown);
+  char m[96];
+  snprintf(m, sizeof(m), "config.ini geladen: %d Wert(e) uebernommen, %d Zeile(n) nicht erkannt", n, unknown);
+  logLine(m);
+}
+
+// Schreibt den uebergebenen Text (ueberschreibend) nach /config.ini und wendet ihn sofort an.
+static bool saveConfigIniToSd(const String &text, int *applied, int *unknown) {
+  if (!sdReady) return false;
+  File f = SD.open(CFG_INI_PATH, FILE_WRITE);
+  if (!f) return false;
+  f.print(text);
+  f.close();
+  *applied = applyConfigText(text, unknown);
+  return true;
 }
 
 // ---- Ansichten: Text -> Karte -> Hoehentrack/Stationen -> GPS-Radar -> Text
@@ -4436,9 +5085,20 @@ static void cycleView() {
 // MI_ID (Funkmodus Sondenempfang/LoRa-APRS) bewusst als ERSTER Menuepunkt (siehe Changelog): die wichtigste
 // Weiche -- in welchem Modus das Geraet ueberhaupt arbeitet -- soll ganz oben stehen statt irgendwo in der
 // langen Liste zu verschwinden, am Geraet genauso wie auf der Weboberflaeche (/menu iteriert dieselbe Reihenfolge).
-enum { MI_ID, MI_SEARCH, MI_FREQ, MI_BW, MI_FIX, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_TXPWR, MI_SHUTDOWN, MI_COUNT };
-static const char menuKey[MI_COUNT] = {'i', 's', 'f', 'b', 'k', 'v', 'l', 'z', 'g', 'r', 'o', 'x', 'm', 'y', 't', 'j', 'p', 'w', 'e', 'a', 'u', 'q'};
-static const char *const menuName[MI_COUNT] = {"Funkmodus", "Suche", "Frequenz", "Bandbreite", "Fehlerkorr.", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Kartenart", "Helligkeit", "Tastatur", "GPX", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Sendeleistung", "Herunterfahren"};
+// Feature v4.93 (Wunsch Okt. 2026): die 5 LoRa-Funkparameter Frequenz/Bandbreite/Spreizfaktor/Codierrate/
+// Sendeleistung stehen jetzt als zusammenhaengender Block in genau dieser Reihenfolge direkt hintereinander
+// (vorher: Frequenz/Bandbreite ganz vorne, Sendeleistung/Spreizfaktor/Codierrate weit hinten getrennt davon).
+// Reine Reihenfolge-Aenderung der Enum-Deklaration -- die Tasten (menuKey[]) bleiben pro Punkt unveraendert
+// (z. B. weiterhin 'u' fuer Sendeleistung), nur die Position in der Liste verschiebt sich; der gesamte Rest des
+// Sketches verwendet ausschliesslich die symbolischen Namen (MI_FREQ, MI_SF, ...), keine Code-Stelle haengt von
+// den konkreten Zahlenwerten/der alten Reihenfolge ab.
+// MI_CFGMENU (Feature v4.95, Taste H): oeffnet cfgMenu(), den On-Device-Editor fuer config.ini -- bewusst wie
+// MI_NET ein reiner Aktions-Punkt (kein Umschalter), siehe menuStep()/menuWebSkip() weiter unten. Taste 'h' ist
+// die einzige im Einstellungsmenue noch freie Taste (alle anderen 25 Buchstaben sind schon vergeben, 'c' direkt
+// hier im Menue zudem fest fuer den Screenshot reserviert, siehe runMenu()) -- daher ohne Mnemonic-Bezug zum Namen.
+enum { MI_ID, MI_SEARCH, MI_FREQ, MI_BW, MI_SF, MI_CR, MI_TXPWR, MI_FIX, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_CFGMENU, MI_SHUTDOWN, MI_COUNT };
+static const char menuKey[MI_COUNT] = {'i', 's', 'f', 'b', 'd', 'n', 'u', 'k', 'v', 'l', 'z', 'g', 'r', 'o', 'x', 'm', 'y', 't', 'j', 'p', 'w', 'e', 'a', 'h', 'q'};
+static const char *const menuName[MI_COUNT] = {"Funkmodus", "Suche", "Frequenz", "Bandbreite", "Spreizfaktor", "Codierrate", "Sendeleistung", "Fehlerkorr.", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Kartenart", "Helligkeit", "Tastatur", "GPX", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Konfiguration (.ini) editieren", "Herunterfahren"};
 
 // Anzeigename eines Menuepunkts -- wie menuName[], aber MI_SHUB heisst im LoRa-Modus "LoRa Upload" statt
 // "SondeHub-Upload" (siehe menuValue()/menuStep() MI_SHUB: derselbe Menuepunkt ist dort je nach radioMode
@@ -4449,6 +5109,33 @@ static const char *menuDisplayName(int i) { return (i == MI_SHUB && radioMode ==
 // handleInput()) -- dort oeffnet A also weiter den Zoom, nicht dieses Menue; ausserhalb der Karte (Hoehentrack/
 // Stationen, Ruhebild) oder ueber Enter+Auswahl ist es ganz normal erreichbar. Gleiches Prinzip wie schon bei R/M.
 static const float bwList[7] = {9.7f, 11.7f, 14.6f, 19.5f, 23.4f, 29.3f, 39.0f};   // gueltige RX-Bandbreiten des SX1262 [kHz]
+
+// Fix/Feature v4.87: Menue nur nach aktuellem Funkmodus (radioMode) filtern -- ein Punkt, der im jeweils
+// anderen Modus gar keine Wirkung haette (z. B. Fehlerkorr./Vorhersage/Landehoehe im LoRa-Modus, oder
+// Sendeleistung/Spreizfaktor/Codierrate im Sondenempfang), wird nicht mehr angezeigt/angesprungen -- weder
+// am Geraet (drawMenu()/runMenu()) noch auf der Weboberflaeche (menuWebSkip(), siehe dort). MI_ID selbst
+// (Funkmodus-Umschalter) ist immer sichtbar, sonst gaebe es aus dem jeweils anderen Modus keinen Weg zurueck.
+static bool menuItemApplies(int i) {
+  switch (i) {
+    case MI_SEARCH: case MI_FIX: case MI_PRED: case MI_LAND:
+      return radioMode == 0;                      // nur Sondenempfang
+    case MI_TXPWR: case MI_SF: case MI_CR:
+      return radioMode == 1;                      // nur LoRa-APRS
+    default:
+      return true;                                // Rest gilt in beiden Modi
+  }
+}
+
+// Naechster im aktuellen Modus sichtbarer Menuepunkt ab 'from' in Richtung dir (+1/-1), ueberspringt
+// ausgeblendete Punkte (siehe menuItemApplies()). MI_COUNT Versuche reichen immer, da MI_ID garantiert sichtbar ist.
+static int menuNextApplicable(int from, int dir) {
+  int i = from;
+  for (int n = 0; n < MI_COUNT; n++) {
+    i = (i + dir + MI_COUNT) % MI_COUNT;
+    if (menuItemApplies(i)) return i;
+  }
+  return from;
+}
 
 static char editBuf[12];                          // getippter Zahlenwert
 static int editLen = 0;
@@ -4962,7 +5649,8 @@ static void webIndex() {
                      "return confirm(n+' Datei(en) löschen?');}</script>"
                      "</head><body>");
   server.sendContent(String("<p>SD-Karte -- ") + spc + "</p>");
-  server.sendContent("<p><a href=\"/menu\">Men&uuml;-Fernsteuerung &amp; Live-Bild</a></p>");
+  server.sendContent("<p><a href=\"/menu\">Men&uuml;-Fernsteuerung &amp; Live-Bild</a> -- "
+                     "<a href=\"/cfg\">Einstellungen (config.ini)</a></p>");
   server.sendContent("<form method=POST action=\"/dm\">"
                      "<h2>Screenshots <a href=\"/zf\">(alle als ZIP)</a></h2>"
                      "<label><input type=checkbox onclick=\"selAll(this,'c_shots')\"> Alle ausw&auml;hlen</label><table>");
@@ -4979,6 +5667,108 @@ static void webIndex() {
                      "</form>");
   server.sendContent(String("<p style=\"color:#666;font-size:12px;margin-top:20px\">T-Deck RS41 v") + FW_VERSION + "</p></body></html>");
   server.sendContent("");
+}
+
+// Feature v4.95 (Wunsch Okt. 2026, "settings auch als ini ins dateisystem, updatebar per upload, muss
+// downloadbar sein oder sogar auf der website aenderbar"): /cfg zeigt den aktuellen Stand aller in
+// CFG_REGISTRY gefuehrten Werte in einem Textfeld direkt zum Bearbeiten an (POST /cfgsave speichert +
+// wendet sofort an), dazu einen Download-Knopf (/cfgdl, als .ini-Datei) fuer die Offline-Bearbeitung/
+// Sicherung und ein Datei-Upload-Formular (/cfgup) fuer eine so bearbeitete Datei.
+static void webCfgPage() {
+  String cur = buildConfigIniText();
+  String esc = cur;
+  esc.replace("&", "&amp;"); esc.replace("<", "&lt;"); esc.replace(">", "&gt;");
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html; charset=utf-8", "");
+  server.sendContent("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
+                     "<link rel=icon href=\"/favicon.ico\"><title>T-Deck RS41 -- Einstellungen</title>"
+                     "<style>body{font-family:sans-serif;margin:12px auto;max-width:760px;background:#000;color:#fff}"
+                     "textarea{width:100%;height:60vh;font-family:monospace;font-size:13px;background:#111;color:#cfc;"
+                     "border:1px solid #444;box-sizing:border-box}a{color:#6cf}button{margin:10px 6px 10px 0;padding:6px 14px}"
+                     "</style></head><body>");
+  server.sendContent("<p><a href=\"/\">&larr; zur&uuml;ck</a></p><h2>Einstellungen (config.ini)</h2>"
+                     "<p>Nur die \"weichen\" Werte (Timings, Schwellwerte, Farben, Transparenz, T&ouml;ne) -- "
+                     "Bedeutung je Name siehe settings.h im Repo (Markierung \"-- CFG:\"). &Auml;nderungen "
+                     "wirken sofort, ohne Neustart, und &uuml;berstehen auch einen Neustart (liegen auf der "
+                     "SD-Karte als /config.ini). Farben (COL_...) als normales RGB888 (0xRRGGBB, wie in "
+                     "jedem Colorpicker).</p>");
+  server.sendContent("<form method=POST action=\"/cfgsave\"><textarea name=ini spellcheck=false>");
+  server.sendContent(esc);
+  server.sendContent("</textarea><br><button type=submit>Speichern &amp; sofort anwenden</button>"
+                     "<a href=\"/cfgdl\"><button type=button>Herunterladen</button></a></form>");
+  server.sendContent("<h3>Oder Datei hochladen</h3>"
+                     "<form method=POST action=\"/cfgup\" enctype=\"multipart/form-data\">"
+                     "<input type=file name=f accept=\".ini,.txt\"> "
+                     "<button type=submit>Hochladen &amp; anwenden</button></form>");
+  server.sendContent("<h3>Falls etwas schiefging</h3>"
+                     "<form method=POST action=\"/cfgreset\">"
+                     "<button type=submit onclick=\"return confirm('Wirklich ALLE Werte sofort auf die "
+                     "Werkseinstellungen (Compile-Defaults aus settings.h) zuruecksetzen? Eigene Anpassungen "
+                     "gehen dabei verloren.')\">Auf Werkseinstellungen zur&uuml;cksetzen</button></form>");
+  server.sendContent(String("<p style=\"color:#666;font-size:12px;margin-top:20px\">T-Deck RS41 v") + FW_VERSION + "</p></body></html>");
+  server.sendContent("");
+}
+
+static void webCfgDownload() {
+  server.sendHeader("Content-Disposition", "attachment; filename=\"config.ini\"");
+  server.send(200, "text/plain; charset=utf-8", buildConfigIniText());
+}
+
+static void webCfgResult(bool ok, int applied, int unknown) {
+  String msg = ok ? (String("Gespeichert und angewendet: ") + applied + " Wert(e)"
+                     + (unknown ? (String(", ") + unknown + " Zeile(n) nicht erkannt") : String("")))
+                  : String("Fehler: SD-Karte nicht bereit, nichts gespeichert.");
+  server.send(200, "text/html; charset=utf-8",
+              String("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
+                     "</head><body style=\"font-family:sans-serif;background:#000;color:#fff;margin:12px\">")
+              + "<p>" + msg + "</p><p><a href=\"/cfg\" style=\"color:#6cf\">zur&uuml;ck</a></p></body></html>");
+}
+
+static void webCfgSave() {
+  if (!server.hasArg("ini")) { server.send(400, "text/plain; charset=utf-8", "ungueltig"); return; }
+  int applied = 0, unknown = 0;
+  bool ok = saveConfigIniToSd(server.arg("ini"), &applied, &unknown);
+  char lm[96];
+  snprintf(lm, sizeof(lm), "WLAN: config.ini gespeichert (%d Wert(e), %d unbekannt)", applied, unknown);
+  logLine(lm);
+  webCfgResult(ok, applied, unknown);
+}
+
+// Feature v4.95 (Wunsch Okt. 2026, "wenn die Werte komplett daneben sind und ich nicht weiss, wie sie
+// waren"): setzt SOFORT alle Werte auf die Compile-Defaults zurueck (siehe cfgResetToDefaults()), ohne
+// Neustart, und schreibt sie gleich als neue config.ini auf die SD-Karte (sonst wuerde ein noch vorhandener
+// alter Stand beim naechsten Neustart die eben zurueckgesetzten Werte wieder ueberschreiben). Eigener Knopf
+// mit JS-Rueckfrage im Webformular, siehe webCfgPage().
+static void webCfgReset() {
+  cfgResetToDefaults();
+  int applied = 0, unknown = 0;
+  bool ok = saveConfigIniToSd(buildConfigIniText(), &applied, &unknown);
+  logLine("WLAN: config.ini auf Werkseinstellungen zurueckgesetzt (sofort wirksam)");
+  webCfgResult(ok, applied, unknown);
+}
+
+// Multipart-Datei-Upload (siehe server.onFileUpload() bei der Routenregistrierung): die Daten kommen hier
+// haeppchenweise (UPLOAD_FILE_WRITE) an, bevor der normale Handler fuer "/cfgup" (webCfgUploadDone) die
+// Antwort schickt. Werden in einen String gesammelt -- die Datei ist klein (ein paar KB Text).
+static String cfgUploadBuf;
+static void webCfgUploadData() {
+  if (server.uri() != "/cfgup") return;   // onFileUpload() ist global, nur fuer diese Route zustaendig
+  HTTPUpload &up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    cfgUploadBuf = "";
+    cfgUploadBuf.reserve(4096);
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    cfgUploadBuf += String((const char *)up.buf, up.currentSize);
+  }
+}
+
+static void webCfgUploadDone() {
+  int applied = 0, unknown = 0;
+  bool ok = saveConfigIniToSd(cfgUploadBuf, &applied, &unknown);
+  char lm[96];
+  snprintf(lm, sizeof(lm), "WLAN: config.ini hochgeladen (%d Wert(e), %d unbekannt)", applied, unknown);
+  logLine(lm);
+  webCfgResult(ok, applied, unknown);
 }
 
 static void webSend(const String &path, const char *type, const String &name) {
@@ -5326,6 +6116,12 @@ static void wifiServerStart() {
   if (!routes) {
     routes = true;
     server.on("/", webIndex);
+    server.on("/cfg", webCfgPage);
+    server.on("/cfgdl", webCfgDownload);
+    server.on("/cfgsave", HTTP_POST, webCfgSave);
+    server.on("/cfgup", HTTP_POST, webCfgUploadDone);
+    server.on("/cfgreset", HTTP_POST, webCfgReset);
+    server.onFileUpload(webCfgUploadData);
     server.on("/f", webShot);
     server.on("/g", webGpx);
     server.on("/l", webLog);
@@ -5432,15 +6228,24 @@ static void wifiTick() {
   if (!wifiConnecting) return;
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnecting = false;
+    wifiBootSeq = false;                                     // Boot-Sequenz (falls aktiv) erfolgreich abgeschlossen,
+                                                              // siehe wifiBootSeq-Deklaration -- bleibt jetzt an,
+                                                              // solange die Verbindung steht (wifiLinkTick())
     wifiServerStart();
     mdnsOtaEnsure();
     char m[120];
     snprintf(m, sizeof(m), "WLAN Heimnetz verbunden: http://%s oder http://%s.local", WiFi.localIP().toString().c_str(), WIFI_HOST);
     logLine(m);
-  } else if (millis() - wifiConnMs > 20000UL) {
+  } else if (millis() - wifiConnMs > WIFI_BOOT_HOME_TIMEOUT_MS) {
     wifiConnecting = false;
-    logLine("WLAN: Heimnetz nicht erreichbar, WLAN aus");   // kein automatischer Zugangspunkt mehr -- der wird nur
-    wifiSet(0);                                             // manuell (Menue W) gestartet, sonst bleibt er ungenutzt an
+    if (wifiBootSeq) {                                       // Teil der Boot-Sequenz (Feature v4.88): statt ganz
+      logLine("WLAN: Heimnetz nicht erreichbar, oeffne Boot-Zugangspunkt");   // aus jetzt die Boot-Hotspot-Phase
+      wifiSet(2);
+      wifiBootApStartMs = millis();
+    } else {
+      logLine("WLAN: Heimnetz nicht erreichbar, WLAN aus");   // ausserhalb der Boot-Sequenz (z. B. spaeter manuell per
+      wifiSet(0);                                             // Menue W erneut versucht): wie bisher kein automatischer AP
+    }
   }
 }
 
@@ -6368,15 +7173,30 @@ static void wifiLinkTick() {
   }
 }
 
-// Nur der eigene Zugangspunkt (immer manuell gestartet, siehe Menue W) schaltet bei Nichtnutzung automatisch ab --
-// das Heimnetz bleibt an, solange die Verbindung steht (dort haengt das T-Deck ohnehin am Strom, siehe wifiLinkTick
-// fuer den Fall "ausser Reichweite"). Zugangspunkt gilt als genutzt, solange ein Geraet verbunden ist.
+// Der MANUELL (Menue W) gestartete eigene Zugangspunkt schaltet bei Nichtnutzung automatisch ab -- das
+// Heimnetz bleibt an, solange die Verbindung steht (dort haengt das T-Deck ohnehin am Strom, siehe wifiLinkTick
+// fuer den Fall "ausser Reichweite"). Zugangspunkt gilt als genutzt, solange ein Geraet verbunden ist. Fuer
+// den AUTOMATISCH beim Einschalten geoeffneten Boot-Zugangspunkt siehe stattdessen wifiBootApTick() unten:
+// dort gilt ein FESTES Zeitfenster (WIFI_BOOT_AP_MS) statt eines Nichtnutzungs-Timers -- diese Funktion hier
+// laeuft waehrend der Boot-Hotspot-Phase zwar mit, schaltet aber nur ab, wenn wirklich niemand verbunden war.
 static void wifiIdleTick() {
   if (!wifiOn || wifiMode != 2) return;
   if (WiFi.softAPgetStationNum() > 0) { wifiActivityMs = millis(); return; }
   if (millis() - wifiActivityMs > WIFI_IDLE_OFF_MS) {
     logLine("WLAN: Zugangspunkt ohne Verbindung, WLAN aus");
     wifiSet(0);
+  }
+}
+
+// Feature v4.88: Boot-Hotspot-Phase der Boot-WLAN-Sequenz (siehe wifiBootSeq-Deklaration/setup()/wifiTick()) --
+// anders als wifiIdleTick() oben (manueller Zugangspunkt, schaltet nur bei NICHTNUTZUNG ab) laeuft hier ein
+// FESTES Zeitfenster: nach WIFI_BOOT_AP_MS ist Schluss, auch wenn gerade ein Geraet verbunden ist.
+static void wifiBootApTick() {
+  if (!wifiBootSeq || !wifiOn || wifiMode != 2) return;
+  if (millis() - wifiBootApStartMs > WIFI_BOOT_AP_MS) {
+    logLine("WLAN: Boot-Zugangspunkt-Zeitfenster abgelaufen, WLAN aus");
+    wifiSet(0);
+    wifiBootSeq = false;
   }
 }
 
@@ -6455,8 +7275,8 @@ static void doShutdown() {
 static void menuValue(int i, char *b, size_t n) {
   switch (i) {
     case MI_SEARCH: snprintf(b, n, "%s", fixedFreq ? "fest" : "Auto"); break;
-    case MI_FREQ:   snprintf(b, n, "%.3f MHz", freqMHz); break;
-    case MI_BW:     snprintf(b, n, "%.1f kHz", rxBw); break;
+    case MI_FREQ:   if (radioMode == 1) snprintf(b, n, "%.3f MHz", loraFreqMHz); else snprintf(b, n, "%.3f MHz", freqMHz); break;
+    case MI_BW:     if (radioMode == 1) snprintf(b, n, "%.2f kHz", loraBwKHz); else snprintf(b, n, "%.1f kHz", rxBw); break;
     case MI_FIX:    snprintf(b, n, "%s", fixOn ? "an" : "aus"); break;
     case MI_ID:   snprintf(b, n, "%s", radioMode == 1 ? "LoRa" : "Sondenempfang"); break;
     case MI_PRED:   snprintf(b, n, "%s", predOn ? "an" : "aus"); break;
@@ -6493,6 +7313,8 @@ static void menuValue(int i, char *b, size_t n) {
       else snprintf(b, n, "%s", sondehubMode == 0 ? "aus" : "Chase-Car");
       break;
     case MI_TXPWR:  snprintf(b, n, "%d dBm", txPowerDbm); break;
+    case MI_SF:     snprintf(b, n, "SF%d", loraSf); break;
+    case MI_CR:     snprintf(b, n, "4/%d", loraCr); break;
     case MI_SHUTDOWN: snprintf(b, n, "%s", shutdownConfirm ? "sicher?" : "Space x2"); break;
     default:        b[0] = 0;
   }
@@ -6504,20 +7326,34 @@ static void menuStep(int i, int dir, bool big) {
   switch (i) {
     case MI_SEARCH: fixedFreq = !fixedFreq; restartRx = true; break;
     case MI_FREQ:                                  // klein 10 kHz, gross 100 kHz; rollt am Rand auf die andere Seite um
-      freqMHz += (big ? 0.100f : 0.010f) * dir;
-      if (freqMHz > 406.0f) freqMHz = 400.15f + (freqMHz - 406.0f);
-      if (freqMHz < 400.15f) freqMHz = 406.0f - (400.15f - freqMHz);
-      fixedFreq = true;                            // Frequenz aendern = feste Frequenz
-      restartRx = true;
+      if (radioMode == 1) {                        // LoRa: eigener Wertebereich (70-cm-Band), kein "fest"-Umschalter
+        loraFreqMHz += (big ? 0.100f : 0.010f) * dir;
+        if (loraFreqMHz > 440.0f) loraFreqMHz = 430.0f + (loraFreqMHz - 440.0f);
+        if (loraFreqMHz < 430.0f) loraFreqMHz = 440.0f - (430.0f - loraFreqMHz);
+        loraParamsChanged = true;
+      } else {
+        freqMHz += (big ? 0.100f : 0.010f) * dir;
+        if (freqMHz > 406.0f) freqMHz = 400.15f + (freqMHz - 406.0f);
+        if (freqMHz < 400.15f) freqMHz = 406.0f - (400.15f - freqMHz);
+        fixedFreq = true;                          // Frequenz aendern = feste Frequenz
+        restartRx = true;
+      }
       break;
-    case MI_BW: {
-      int idx = 0;
-      for (int k = 0; k < 7; k++) if (fabsf(bwList[k] - rxBw) < fabsf(bwList[idx] - rxBw)) idx = k;
-      idx = (idx + (dir > 0 ? 1 : 6)) % 7;
-      rxBw = bwList[idx];
-      restartRx = true;
+    case MI_BW:
+      if (radioMode == 1) {
+        int idx = 0;
+        for (int k = 0; k < NLORABW; k++) if (fabsf(loraBwList[k] - loraBwKHz) < fabsf(loraBwList[idx] - loraBwKHz)) idx = k;
+        idx = (idx + (dir > 0 ? 1 : NLORABW - 1)) % NLORABW;
+        loraBwKHz = loraBwList[idx];
+        loraParamsChanged = true;
+      } else {
+        int idx = 0;
+        for (int k = 0; k < 7; k++) if (fabsf(bwList[k] - rxBw) < fabsf(bwList[idx] - rxBw)) idx = k;
+        idx = (idx + (dir > 0 ? 1 : 6)) % 7;
+        rxBw = bwList[idx];
+        restartRx = true;
+      }
       break;
-    }
     case MI_FIX: fixOn = !fixOn; break;
     case MI_ID:                                      // Sondenempfang <-> LoRa-APRS, siehe radioApplyMode()
       radioMode = 1 - radioMode;
@@ -6596,15 +7432,20 @@ static void menuStep(int i, int dir, bool big) {
     case MI_GPX: gpxOn = !gpxOn; break;
     case MI_SDLOG: sdLogOn = !sdLogOn; if (sdLogOn) logEnableNow(); break;
     case MI_WIFI: {                                  // aus -> Heimnetz -> Zugangspunkt -> aus
+      wifiBootSeq = false;                           // Nutzer greift selbst ein -- Boot-Sequenz (falls noch aktiv)
+                                                      // beenden, sonst wuerde wifiBootApTick() spaeter ungefragt dazwischenfunken
       int next = (wifiMode + (dir > 0 ? 1 : 2)) % 3;
       if (next == 1 && !wifiSsid[0]) next = (dir > 0) ? 2 : 0;       // noch kein Heimnetz gespeichert
       wifiSet(next);
       break;
     }
     case MI_NET: if (dir > 0) netSetup(); break;
+    case MI_CFGMENU: if (dir > 0) cfgMenu(); break;
     case MI_SHUB:                                     // im LoRa-Modus: LoRa Upload aus<->an; sonst wie bisher aus<->Chase-Car
       if (radioMode == 1) {
         loraTxOn = !loraTxOn;
+        loraPauseUntilMs = 0;   // Feature v4.88: Nutzer entscheidet hier bewusst/dauerhaft -- eine noch laufende
+                                 // Kurzpause (Taste L, siehe handleInput()/loraPauseTick()) ist damit hinfaellig
         if (loraTxOn) { aprsBeaconNextMs = 0; aprsBeaconLastSet = false; }   // gleich die erste eigene Position senden, Wegstrecke-Anker neu
       } else {
         sondehubMode = (uint8_t)((sondehubMode + 1) % 2);
@@ -6615,6 +7456,22 @@ static void menuStep(int i, int dir, bool big) {
                                                         // angewendet in aprsSendBeacon() vor jedem Senden
       txPowerDbm = (int8_t)constrain((int)txPowerDbm + (big ? 5 : 1) * dir, -9, 22);
       break;
+    case MI_SF: {                                      // Spreizfaktor SF6..SF12 (siehe loraSfList[])
+      int idx = 0;
+      for (int k = 0; k < NLORASF; k++) if (loraSfList[k] == loraSf) idx = k;
+      idx = (idx + (dir > 0 ? 1 : NLORASF - 1)) % NLORASF;
+      loraSf = loraSfList[idx];
+      loraParamsChanged = true;
+      break;
+    }
+    case MI_CR: {                                      // Codierrate 4/5..4/8 (siehe loraCrList[])
+      int idx = 0;
+      for (int k = 0; k < NLORACR; k++) if (loraCrList[k] == loraCr) idx = k;
+      idx = (idx + (dir > 0 ? 1 : NLORACR - 1)) % NLORACR;
+      loraCr = loraCrList[idx];
+      loraParamsChanged = true;
+      break;
+    }
     case MI_SHUTDOWN:                                 // zweimal weiter (Space) schaltet wirklich ab
       if (dir > 0) {
         if (shutdownConfirm && millis() - shutdownConfirmMs < 4000) { doShutdown(); }
@@ -6646,10 +7503,16 @@ static bool menuApplyTyped(int i) {
         snprintf(t, sizeof(t), "%.3s.%s", editBuf, editBuf + 3);
         mhz = atof(t);
       }
-      if (mhz < 400.15 || mhz > 406.0) return false;
-      freqMHz = (float)mhz;
-      fixedFreq = true;
-      restartRx = true;
+      if (radioMode == 1) {
+        if (mhz < 430.0 || mhz > 440.0) return false;
+        loraFreqMHz = (float)mhz;
+        loraParamsChanged = true;
+      } else {
+        if (mhz < 400.15 || mhz > 406.0) return false;
+        freqMHz = (float)mhz;
+        fixedFreq = true;
+        restartRx = true;
+      }
       return true;
     }
     case MI_LAND:
@@ -6739,8 +7602,10 @@ static int menuOptionCount(int i) {
   switch (i) {
     case MI_SEARCH: case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_SDLOG: case MI_SHUB: case MI_ID: return 2;
     case MI_TBLOCK: case MI_KB: return 3;
-    case MI_BW: return 7;
+    case MI_BW: return radioMode == 1 ? NLORABW : 7;
     case MI_MAP: return NSTYLE;
+    case MI_SF: return NLORASF;
+    case MI_CR: return NLORACR;
   }
   return 0;
 }
@@ -6750,7 +7615,9 @@ static int menuOptionCount(int i) {
 static void menuOptionLabel(int i, int idx, char *b, size_t n) {
   switch (i) {
     case MI_SEARCH: snprintf(b, n, "%s", idx == 0 ? "Auto" : "fest"); break;
-    case MI_BW:     snprintf(b, n, "%.1f kHz", bwList[idx]); break;
+    case MI_BW:     if (radioMode == 1) snprintf(b, n, "%.2f kHz", loraBwList[idx]); else snprintf(b, n, "%.1f kHz", bwList[idx]); break;
+    case MI_SF:     snprintf(b, n, "SF%d", loraSfList[idx]); break;
+    case MI_CR:     snprintf(b, n, "4/%d", loraCrList[idx]); break;
     case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_SDLOG:
       snprintf(b, n, "%s", idx == 0 ? "aus" : "an"); break;
     case MI_SHUB:   snprintf(b, n, "%s", radioMode == 1 ? (idx == 0 ? "aus" : "an") : (idx == 0 ? "aus" : "Chase-Car")); break;
@@ -6772,9 +7639,15 @@ static int menuCurrentIndex(int i) {
     case MI_SEARCH: return fixedFreq ? 1 : 0;
     case MI_BW: {
       int idx = 0;
-      for (int k = 0; k < 7; k++) if (fabsf(bwList[k] - rxBw) < fabsf(bwList[idx] - rxBw)) idx = k;
+      if (radioMode == 1) {
+        for (int k = 0; k < NLORABW; k++) if (fabsf(loraBwList[k] - loraBwKHz) < fabsf(loraBwList[idx] - loraBwKHz)) idx = k;
+      } else {
+        for (int k = 0; k < 7; k++) if (fabsf(bwList[k] - rxBw) < fabsf(bwList[idx] - rxBw)) idx = k;
+      }
       return idx;
     }
+    case MI_SF: { int idx = 0; for (int k = 0; k < NLORASF; k++) if (loraSfList[k] == loraSf) idx = k; return idx; }
+    case MI_CR: { int idx = 0; for (int k = 0; k < NLORACR; k++) if (loraCrList[k] == loraCr) idx = k; return idx; }
     case MI_FIX:    return fixOn ? 1 : 0;
     case MI_PRED:   return predOn ? 1 : 0;
     case MI_OWN:    return ownTrailOn ? 1 : 0;
@@ -6794,7 +7667,12 @@ static int menuCurrentIndex(int i) {
 static void menuSetIndex(int i, int idx) {
   switch (i) {
     case MI_SEARCH: fixedFreq = (idx != 0); restartRx = true; break;
-    case MI_BW: rxBw = bwList[constrain(idx, 0, 6)]; restartRx = true; break;
+    case MI_BW:
+      if (radioMode == 1) { loraBwKHz = loraBwList[constrain(idx, 0, NLORABW - 1)]; loraParamsChanged = true; }
+      else { rxBw = bwList[constrain(idx, 0, 6)]; restartRx = true; }
+      break;
+    case MI_SF: loraSf = loraSfList[constrain(idx, 0, NLORASF - 1)]; loraParamsChanged = true; break;
+    case MI_CR: loraCr = loraCrList[constrain(idx, 0, NLORACR - 1)]; loraParamsChanged = true; break;
     case MI_FIX: fixOn = (idx != 0); break;
     case MI_PRED: predOn = (idx != 0); predictLanding(); break;
     case MI_OWN:
@@ -6806,6 +7684,7 @@ static void menuSetIndex(int i, int idx) {
     case MI_SHUB:
       if (radioMode == 1) {
         loraTxOn = (idx != 0);
+        loraPauseUntilMs = 0;   // siehe menuStep() MI_SHUB -- bewusste Entscheidung hier beendet eine laufende Kurzpause
         if (loraTxOn) { aprsBeaconNextMs = 0; aprsBeaconLastSet = false; }
       } else {
         sondehubMode = (uint8_t)(idx != 0 ? 1 : 0);
@@ -6840,7 +7719,9 @@ static void menuSetIndex(int i, int idx) {
 // MI_WIFI zusaetzlich zu MI_SHUTDOWN/MI_NET ausgenommen: wifiSet() (siehe menuStep()) reisst dabei per
 // wifiStopAll() das WLAN (und damit genau die Verbindung, ueber die der Browser gerade diese Anfrage
 // stellt) komplett ein -- von der Weboberflaeche aus waere das der Ast, auf dem man sitzt.
-static bool menuWebSkip(int i) { return i == MI_SHUTDOWN || i == MI_NET || i == MI_WIFI; }
+// Fix/Feature v4.87: zusaetzlich zu den schon ausgenommenen Punkten jetzt auch alle im aktuellen Funkmodus
+// nicht zutreffenden Punkte ausgeblendet (siehe menuItemApplies()) -- dieselbe Filterung wie am Geraet.
+static bool menuWebSkip(int i) { return i == MI_SHUTDOWN || i == MI_NET || i == MI_WIFI || i == MI_CFGMENU || !menuItemApplies(i); }   // MI_CFGMENU (Feature v4.95): braucht die physische Tastatur (textInput()), nicht per Weboberflaeche fernsteuerbar -- dort stattdessen /cfg
 
 // Menuepunkt-Name fuer die Weboberflaeche, mit echten Umlauten als HTML-Entity (menuName[] selbst bleibt
 // ASCII, weil es unveraendert auch die Geraete-Anzeige beschriftet).
@@ -6889,17 +7770,25 @@ static void webMenu() {
   // Ergebniscode statt Freitext in der URL, Text/Farbe hier einmalig zugeordnet; leer, solange kein pm= in der
   // URL steht (z. B. beim normalen Aufruf von /menu ohne vorherigen Knopfdruck).
   String pmNotice = "";
+  char sentBuf[64];                                 // Fix v4.87: Datum & Uhrzeit mit in die Rueckmeldung (muss hier
+                                                      // ausserhalb des if-Zweigs stehen, damit sie unten noch gueltig ist)
   if (server.hasArg("pm")) {
     String pm = server.arg("pm");
     const char *txt;
     const char *col;
-    if (pm == "sent") { txt = "Eigene Position wurde gesendet."; col = "#8f8"; }
+    if (pm == "sent") {
+      char ts[32];
+      dateTimeText(ts, sizeof(ts));
+      snprintf(sentBuf, sizeof(sentBuf), "Eigene Position wurde gesendet (%s).", ts);
+      txt = sentBuf; col = "#8f8";
+    }
     else if (pm == "nofix") { txt = "Position NICHT gesendet: kein aktueller GPS-Fix."; col = "#fa0"; }
     else if (pm == "off") { txt = "Position NICHT gesendet: LoRa-Beacon ist aus oder nicht im LoRa-Modus."; col = "#fa0"; }
     else { txt = ""; col = "#fa0"; }
     if (txt[0]) pmNotice = String("<p style=\"color:") + col + ";font-weight:bold\">" + txt + "</p>";
   }
-  server.sendContent(String("<p><a href=\"/\">&larr; Zur Startseite</a></p>"
+  server.sendContent(String("<p><a href=\"/\">&larr; Zur Startseite</a> -- "
+                     "<a href=\"/cfg\">Einstellungen (config.ini)</a></p>"
                      "<p><a class=b href=\"/vspace\">Ansicht wechseln (Space)</a> "
                      "<a class=b href=\"/vfocus\">Zentrieren/Fokus (R)</a> "
                      "<a class=b href=\"/vsendpos\">Eigene Position senden</a></p>") +
@@ -7282,19 +8171,35 @@ static void webViewSendPos() {
 static void drawMenu(int sel) {
   Adafruit_GFX *g = scr();
   g->fillScreen(ST77XX_BLACK);
-  g->setTextSize(1);                              // kleine Schrift: MI_COUNT Zeilen zu je 11 Pixeln
-  const int rowH = 10;                            // MI_COUNT Zeilen a 10 px + Fusszeile muessen auf 240 px passen
+  g->setTextSize(1);                              // kleine Schrift: je sichtbarer Zeile 10 px
+  const int rowH = 10;                            // sichtbare Zeilen a 10 px + Fusszeile muessen auf 240 px passen
+  int row = 0;                                    // Fix/Feature v4.87: nur im aktuellen Funkmodus zutreffende
+                                                    // Punkte zeichnen (siehe menuItemApplies()) -- row zaehlt nur
+                                                    // die tatsaechlich gezeichneten Zeilen, i bleibt der echte Index
   for (int i = 0; i < MI_COUNT; i++) {
-    int y = 1 + i * rowH;
-    char v[24], nm[24];
+    if (!menuItemApplies(i)) continue;
+    int y = 1 + row * rowH;
+    row++;
+    char v[24], nm[40];   // nm war 24 Byte -- reichte fuer kurze Namen, aber "Konfiguration (.ini) editieren"
+                          // wurde von snprintf() hart abgeschnitten (sichtbar hinter ".ini"); auf 40 vergroessert,
+                          // die Wertespalte bleibt bei x=136, bei diesem Punkt aber ohnehin ohne Wertetext
     if (i == sel && editing) snprintf(v, sizeof(v), "%.*s_", editLen, editBuf);
     else menuValue(i, v, sizeof(v));
     snprintf(nm, sizeof(nm), "[%c] %s", toupper(menuKey[i]), menuDisplayName(i));
     if (i == sel) {
-      g->fillRect(0, y - 1, (y < 25) ? 262 : 320, rowH, ST77XX_CYAN);   // oben rechts bleibt Platz fuer den Statusblock
+      g->fillRect(0, y - 1, (y < 42) ? 268 : 320, rowH, ST77XX_CYAN);   // oben rechts bleibt Platz fuer den Statusblock
+                                                                         // (Feature v4.90/v4.92: Grenze von urspruenglich
+                                                                         // 25 auf 42 px angehoben, seit der Statusblock
+                                                                         // auch die zweizeilige Uhrzeit/Datum-Anzeige
+                                                                         // unter GPS enthaelt, siehe drawClock() -- Breite
+                                                                         // v4.94: 262 -> 268, Statusblock-Spalte selbst
+                                                                         // (x=264 -> 270) ebenfalls um 1 Zeichen nach
+                                                                         // rechts verschoben)
       g->setTextColor(ST77XX_BLACK);
     } else {
-      g->setTextColor((i == MI_FREQ && !fixedFreq) ? 0x8410 : ST77XX_WHITE);
+      g->setTextColor((i == MI_FREQ && radioMode == 0 && !fixedFreq) ? 0x8410 : ST77XX_WHITE);   // "ausgegraut" nur im
+                                                      // Sondenbetrieb bei Auto-Suche -- im LoRa-Modus ist MI_FREQ
+                                                      // immer ein direkt gesetzter Wert, kein fixedFreq-Zustand
     }
     g->setCursor(4, y + 1);
     g->print(nm);
@@ -7302,14 +8207,19 @@ static void drawMenu(int sel) {
                                                    // z. B. "[R] Trackball-Sperre" = 21 Zeichen = 126 px bei 6 px/Zeichen)
     g->print(v);
   }
-  drawStatus(g, 264, 3);                          // nach den Zeilen zeichnen, damit die Auswahlleiste ihn nicht ueberdeckt
+  drawStatus(g, 270, 3);                          // nach den Zeilen zeichnen, damit die Auswahlleiste ihn nicht ueberdeckt
   g->setTextColor(0x8410);                        // Firmware-Version dauerhaft im Menuekopf (vorher nur kurz im
-  g->setCursor(264, 27);                           // Bootsplash zu sehen) -- Luecke zwischen Statusblock (y 3..23)
-  g->print("v");                                   // und der naechsten Zeile, die diese Spalte nutzt (Item 3+);
-  g->print(FW_VERSION);                            // wird als letztes gezeichnet, bleibt also auch sichtbar, wenn
-                                                     // die Auswahlleiste eines davor liegenden Punkts darueberlaeuft
+  g->setCursor(270, 46);                           // (v4.94: x an den verschobenen Statusblock angeglichen)
+                                                     // Bootsplash zu sehen) -- Luecke zwischen Statusblock (seit
+  g->print("v");                                   // v4.90/v4.92 bis y 42, siehe drawStatus()/drawClock()) und der
+  g->print(FW_VERSION);                            // naechsten Zeile, die diese Spalte nutzt (Item 3+); wird als
+                                                     // letztes gezeichnet, bleibt also auch sichtbar, wenn die
+                                                     // Auswahlleiste eines davor liegenden Punkts darueberlaeuft.
+                                                     // BUG behoben (v4.93): stand vorher bei y=27, also mitten in
+                                                     // der neuen zweizeiligen Uhrzeit/Datum-Anzeige (y 24..42,
+                                                     // siehe drawClock()) -- beide ueberlagerten sich unleserlich.
   g->setTextSize(1);
-  const int footY = 1 + MI_COUNT * rowH + 2;      // direkt unter der letzten Zeile, ueberlappt nie
+  const int footY = 1 + row * rowH + 2;           // direkt unter der letzten (sichtbaren) Zeile, ueberlappt nie
   g->fillRect(0, footY - 1, 320, 240 - footY, ST77XX_BLACK);
   g->setCursor(4, footY);
   if (menuNoteUntil && millis() < menuNoteUntil) {
@@ -7326,6 +8236,9 @@ static void drawMenu(int sel) {
   } else if (sel == MI_NET) {
     g->setTextColor(0x8410);
     g->print("Space/Klick: Heimnetz-Name und Passwort eingeben");
+  } else if (sel == MI_FREQ && radioMode == 1) {
+    g->setTextColor(0x8410);
+    g->print("LoRa-APRS-Konvention: 433.775 MHz (abweichend = inkompatibel zu anderen Stationen)");
   } else if (sel == MI_FREQ) {
     g->setTextColor(0x8410);
     char fb[64];
@@ -7334,6 +8247,9 @@ static void drawMenu(int sel) {
     else if (lastScanFreq > 0) snprintf(fb, sizeof(fb), "letzter Scan %.3f MHz, noch keine Sonde", lastScanFreq);
     else snprintf(fb, sizeof(fb), "noch kein Scan/Empfang in dieser Sitzung");
     g->print(fb);
+  } else if (sel == MI_SF || sel == MI_CR) {
+    g->setTextColor(0x8410);
+    g->print("LoRa-APRS-Konvention: SF12 / CR4-5 (abweichend = inkompatibel zu anderen Stationen)");
   } else if (sel == MI_ZOOM) {
     g->setTextColor(0x8410);
     g->print("Wert z.B. 14.5   0 = automatisch   (Karte: A/D)");
@@ -7354,6 +8270,8 @@ static void drawMenu(int sel) {
 // Der Buchstabe waehlt nur den Punkt; Werte per Ziffern + Enter oder Trackball.
 static void runMenu(int startSel = 0) {
   int sel = startSel;
+  if (!menuItemApplies(sel)) sel = menuNextApplicable(sel, +1);   // Fix v4.87: startSel koennte im aktuellen
+                                                                    // Modus ausgeblendet sein -- naechsten sichtbaren nehmen
   editing = false;
   editLen = 0;
   menuOpen = true;           // Fix v4.85: siehe Deklaration/Kommentar bei tbLockMode -- haelt Trackball-Sperre
@@ -7378,12 +8296,12 @@ static void runMenu(int startSel = 0) {
       if (editing) { if (--editLen <= 0) { editing = false; editLen = 0; } }
       else menuStep(sel, -1, false);
     } else if (e == EV_UP) {                          // Trackball bewegt hier nur noch die Auswahl (vorheriger
-      editing = false; editLen = 0;                   // Menuepunkt), verstellt KEINE Werte mehr -- siehe O/P unten
-      sel = (sel - 1 + MI_COUNT) % MI_COUNT;
+      editing = false; editLen = 0;                   // sichtbarer Menuepunkt), verstellt KEINE Werte mehr -- siehe
+      sel = menuNextApplicable(sel, -1);              // O/P unten; ueberspringt im aktuellen Modus ausgeblendete Punkte
       if (sel != MI_SHUTDOWN) shutdownConfirm = false;
-    } else if (e == EV_DOWN) {                        // naechster Menuepunkt
+    } else if (e == EV_DOWN) {                        // naechster sichtbarer Menuepunkt
       editing = false; editLen = 0;
-      sel = (sel + 1) % MI_COUNT;
+      sel = menuNextApplicable(sel, +1);
       if (sel != MI_SHUTDOWN) shutdownConfirm = false;
     } else if (e == EV_LEFT || e == EV_RIGHT) {
       redraw = false;                                 // links/rechts tun im Menue bewusst nichts (mehr)
@@ -7410,7 +8328,7 @@ static void runMenu(int startSel = 0) {
         menuNoteUntil = millis() + MENU_NOTE_MS;
         found = true;
       }
-      if (c == 'f' && sel == MI_FREQ) {              // schon auf F: zweites F uebernimmt die letzte Sondenfrequenz
+      if (c == 'f' && sel == MI_FREQ && radioMode == 0) {   // schon auf F (nur Sondenempfang): zweites F uebernimmt die letzte Sondenfrequenz
         if (lastRxFreq > 0) {
           freqMHz = lastRxFreq;
           fixedFreq = true;
@@ -7425,7 +8343,7 @@ static void runMenu(int startSel = 0) {
         found = true;
       }
       for (int i = 0; i < MI_COUNT && !found; i++)
-        if (menuKey[i] == c) { sel = i; editing = false; editLen = 0; shutdownConfirm = false; found = true; break; }
+        if (menuKey[i] == c && menuItemApplies(i)) { sel = i; editing = false; editLen = 0; shutdownConfirm = false; found = true; break; }
       if (!found) redraw = false;
     }
     if (redraw) drawMenu(sel);
@@ -7433,6 +8351,111 @@ static void runMenu(int startSel = 0) {
   editing = false;
   menuOpen = false;
   showView();
+}
+
+// ========================================================================================================
+// cfgMenu() -- On-Device-Editor fuer config.ini (Feature v4.95, Wunsch Okt. 2026: "geht das auch auf dem
+// kleinen Bildschirm, Trackball scrollt, Eingabe veraendert den Wert mit Plausibilitaetspruefung?"). Eigener
+// scrollbarer Vollbildschirm (wie findPick()), aus dem Einstellungsmenue ueber den neuen Punkt MI_CFGMENU
+// erreichbar (Taste H, siehe menuKey[]/menuStep()). Bearbeiten nutzt die vorhandene Texteingabe (textInput(),
+// also die physische Tastatur), Pruefung gegen die Bereiche aus CFG_REGISTRY[].lo/.hi (siehe CfgEntry) --
+// gueltige Werte werden sofort angewendet UND gleich als neue config.ini gespeichert (kein Neustart noetig,
+// wie beim Webformular); ungueltige werden mit einem Toast abgelehnt, der alte Wert bleibt unveraendert.
+// ========================================================================================================
+static int cfgSel = 0, cfgTop = 0;   // static: merkt sich die Position, auch wenn man das Menue zwischendurch verlaesst
+
+// Parst Text zu einem double gemaess Typ (Farben: RGB888 0xRRGGBB als Zahl) -- noch OHNE ihn anzuwenden, nur
+// fuer die Bereichspruefung. false = kein einziges Zeichen als Zahl erkannt (z. B. leeres Feld, nur Buchstaben).
+static bool cfgParseRaw(CfgType type, const String &text, double &out) {
+  if (text.length() == 0) return false;
+  const char *v = text.c_str();
+  char *endp = nullptr;
+  double d = (type == CFG_U32 || type == CFG_U16) ? (double)strtoul(v, &endp, 0)
+            : (type == CFG_I32)                   ? (double)strtol(v, &endp, 0)
+            :                                         strtod(v, &endp);
+  if (endp == v) return false;
+  out = d;
+  return true;
+}
+
+// Wendet einen bereits geprueften Wert auf die lebende Variable an (Farben: RGB888 -> RGB565, siehe RGB()-Makro).
+static void cfgApplyRaw(const CfgEntry &e, double v) {
+  switch (e.type) {
+    case CFG_U32:    *(uint32_t *)e.ptr = (uint32_t)v; break;
+    case CFG_I32:    *(int *)e.ptr      = (int)v; break;
+    case CFG_FLOAT:  *(float *)e.ptr    = (float)v; break;
+    case CFG_DOUBLE: *(double *)e.ptr   = v; break;
+    case CFG_U16:    *(uint16_t *)e.ptr = RGB((uint32_t)v); break;
+  }
+}
+
+static void cfgMenuDraw() {
+  Adafruit_GFX *g = scr();
+  g->fillScreen(ST77XX_BLACK);
+  g->setTextSize(1);
+  g->setTextColor(ST77XX_CYAN);
+  g->setCursor(4, 2);
+  g->print("Konfiguration (config.ini)");
+  const int rowH = 10, top = 16, visRows = 18;      // 18 Zeilen a 10 px passen zwischen Kopf- und Fusszeile
+  if (cfgSel < cfgTop) cfgTop = cfgSel;               // Scrollfenster der aktuellen Auswahl nachfuehren
+  if (cfgSel >= cfgTop + visRows) cfgTop = cfgSel - visRows + 1;
+  for (int row = 0; row < visRows; row++) {
+    int idx = cfgTop + row;
+    if ((unsigned)idx >= CFG_REGISTRY_N) break;
+    int y = top + row * rowH;
+    const CfgEntry &e = CFG_REGISTRY[idx];
+    char vbuf[32];
+    cfgFormatValue(e, vbuf, sizeof(vbuf));
+    if (idx == cfgSel) { g->fillRect(0, y - 1, 320, rowH, ST77XX_CYAN); g->setTextColor(ST77XX_BLACK); }
+    else g->setTextColor(ST77XX_WHITE);
+    g->setCursor(4, y + 1);
+    g->print(e.name);
+    g->setCursor(200, y + 1);
+    g->print(vbuf);
+  }
+  g->setTextColor(0x8410);
+  g->setCursor(4, 222);
+  g->print("Hoch/Runter: Auswahl   Enter/Klick: bearbeiten");
+  char cb[32];
+  snprintf(cb, sizeof(cb), "%d/%u   Ruecktaste: zurueck", cfgSel + 1, CFG_REGISTRY_N);
+  g->setCursor(4, 232);
+  g->print(cb);
+  if (frameCanvas) blit(frameCanvas);
+}
+
+static void cfgMenuEdit(int idx) {
+  const CfgEntry &e = CFG_REGISTRY[idx];
+  char cur[32], out[32], hint[72];
+  cfgFormatValue(e, cur, sizeof(cur));
+  if (e.type == CFG_U16) snprintf(hint, sizeof(hint), "Bereich 0x%06lX..0x%06lX", (unsigned long)e.lo, (unsigned long)e.hi);
+  else snprintf(hint, sizeof(hint), "Bereich %g..%g", e.lo, e.hi);
+  int n = textInput(e.name, out, sizeof(out), false, cur, hint);
+  if (n < 0) return;                                  // per Backspace auf leerem Feld abgebrochen -- nichts aendern
+  double v;
+  bool ok = cfgParseRaw(e.type, String(out), v) && v >= e.lo && v <= e.hi;
+  if (!ok) { toast("Ungueltig", hint); return; }        // alter Wert bleibt unveraendert
+  cfgApplyRaw(e, v);
+  int applied = 0, unknown = 0;
+  saveConfigIniToSd(buildConfigIniText(), &applied, &unknown);
+  toast(e.name, "gespeichert, sofort wirksam");
+}
+
+static void cfgMenu() {
+  cfgMenuDraw();
+  while (true) {
+    gpsPoll();
+    int e = pollInput();
+    if (e == EV_NONE) { delay(5); continue; }
+    if (e == 0x08) break;                             // Backspace: zurueck ins Einstellungsmenue
+    else if (e == EV_UP) { if (cfgSel > 0) cfgSel--; }
+    else if (e == EV_DOWN) { if (cfgSel + 1 < (int)CFG_REGISTRY_N) cfgSel++; }
+    else if (e == '\r' || e == '\n' || e == EV_CLICK) cfgMenuEdit(cfgSel);
+    else continue;
+    cfgMenuDraw();
+  }
+  // Bewusst KEIN showView() hier (anders als findPick()/findConfirm()): cfgMenu() wird aus dem laufenden
+  // Einstellungsmenue heraus aufgerufen (wie netSetup() bei MI_NET), dessen eigene Schleife nach der
+  // Rueckkehr ohnehin automatisch neu zeichnet (drawMenu(sel), siehe runMenu()).
 }
 
 // Kurzreferenz der Kartentasten (Taste H in der Kartenansicht, siehe handleInput()): schreibt direkt aufs
@@ -7455,7 +8478,7 @@ static void drawHelpScreen() {
     {"C", "Screenshot"},
     {"U", "GPX-Zwischenspeicher sichern"},
     {"Q", "Sonde gefunden melden"},
-    {"Buchstabe", "Menuepunkt direkt oeffnen"},
+    {"L", "LoRa Upload kurz pausieren (nur LoRa-Modus; bildschirmfuellender Countdown/Balken, Piepsen kurz vor Ende, Ruecktaste beendet die Pause vorzeitig)"},
   };
   int y = 16;
   for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
@@ -7568,6 +8591,9 @@ static void aprsBeaconTick();   // weiter unten definiert (nach aprsPoll()/radio
 static void aprsSymbolTick();   // weiter unten definiert, direkt vor aprsBeaconTick()
 static bool aprsSendBeacon();   // weiter unten definiert, vor aprsBeaconTick() -- fuer den Sofort-Versand per
                                  // Trackballklick in handleInput() (unabhaengig vom Takt in aprsBeaconTick())
+static void loraPauseTick();    // weiter unten definiert, direkt vor aprsBeaconTick() (Feature v4.88, Taste L)
+static void loraPauseEnd(const char *msg);   // weiter unten definiert, direkt vor loraPauseTick() (Feature v4.94:
+                                              // gemeinsamer Teil fuer Pause-Ende, ob automatisch oder per Ruecktaste)
 
 // TBLOCK_DOUBLE_TAP_MS -- siehe settings.h
 
@@ -7583,11 +8609,13 @@ static void handleInput() {
   gpxTick();
   wifiLinkTick();
   wifiIdleTick();
+  wifiBootApTick();
   recoveryQueueTick();
   ntpTick();
   onlinePredTick();                                // Landevorhersage per Internet, siehe oben bei predictLanding()
   sondehubListenerTick();                          // Chase-Car-Position an SondeHub, siehe Menue A
   aprsSymbolTick();                                // APRS-Symbol (Stationaer/Fussgaenger/Fahrrad/Bus) nach Tempo
+  loraPauseTick();                                 // LoRa-Upload-Kurzpause (Taste L) automatisch beenden, siehe dort
   aprsBeaconTick();                                // eigene Position per LoRa Upload, siehe Menue A im LoRa-Modus
   beepTick();
   toastTick();
@@ -7683,7 +8711,10 @@ static void handleInput() {
                                        // siehe webViewSendPos()/Changelog -- wer die Position auf der Karte
                                        // selbst als richtig erkennt, soll auch bei schwachem Fix senden koennen
         aprsSendBeacon();
-        toastFor("LoRa", "Position gesendet", TOAST_MS_LONG);   // laenger als ueblich, siehe toastFor()/settings.h --
+        char ts[20], tmsg[40];                                 // Fix v4.87: Datum & Uhrzeit mit in die Rueckmeldung
+        shortDateTime(ts, sizeof(ts));
+        snprintf(tmsg, sizeof(tmsg), "Position gesendet %s", ts);
+        toastFor("LoRa", tmsg, TOAST_MS_LONG);                  // laenger als ueblich, siehe toastFor()/settings.h --
       } else {                                                 // beim Fahren/Laufen bleibt sonst kaum Zeit zum Lesen
         toastFor("LoRa", "nicht gesendet (kein aktueller GPS-Fix)", TOAST_MS_LONG);
       }
@@ -7708,6 +8739,22 @@ static void handleInput() {
     }
     if (c == 'r') { focusCycleOrRecenter(); return; }   // siehe focusCycleOrRecenter() -- auch von der Weboberflaeche
                                                          // (/vfocus) genutzt, deshalb als eigene Funktion ausgelagert
+    if (c == 0x08 && loraPauseUntilMs) {                // Feature v4.94 (Wunsch Okt. 2026): laufende LoRa-Pause
+      loraPauseEnd("wieder an (Pause abgebrochen)");    // (Taste L, bildschirmfuellender Countdown) mit der
+      return;                                           // Ruecktaste vorzeitig beenden, statt bis LORA_PAUSE_MS
+    }                                                    // warten zu muessen
+    if (c == 'l' && radioMode == 1) {                   // Feature v4.88: LoRa Upload kurz pausieren, ohne es ueber
+      if (loraTxOn) {                                   // das Menue dauerhaft abzuschalten -- schaltet sich nach
+        loraTxOn = false;                               // LORA_PAUSE_MS von selbst wieder an (loraPauseTick())
+        loraPauseUntilMs = millis() + LORA_PAUSE_MS;
+        loraPauseLastWarnS = -1;                         // frische Pause -- Warnton-Zaehler neu beginnen
+        saveSettings();
+        toastFor("LoRa Upload", "kurz pausiert", TOAST_MS_LONG);
+      } else {
+        toast("LoRa Upload", "ist aus (Menue A)");
+      }
+      return;
+    }
   }
   if (c == 'n') {                                 // Testtaste: grosse Statuszeile auf der Karte erzwingen, ohne
                                                      // tatsaechlich > 8 km/h fahren zu muessen (bleibt rein im RAM,
@@ -7777,8 +8824,11 @@ static void handleInput() {
     showHelpScreen();
     return;
   }
-  for (int i = 0; i < MI_COUNT; i++)              // sonst: Buchstabe oeffnet das Menue, Punkt ist schon gewaehlt
-    if (menuKey[i] == c) { runMenu(i); return; }
+  // Fix v4.87: der bisherige Fallback hier ("sonst: Buchstabe oeffnet das Menue, Punkt ist schon gewaehlt")
+  // ist entfallen -- jeder Buchstabe, der keinem der obigen Kartenkuerzel entspricht, tut jetzt nichts mehr.
+  // Einziger Weg ins Menue ist Enter (siehe oben). Grund: versehentliche Tastendruecke (z. B. in der Tasche)
+  // sollten nicht mehr ungewollt mitten im Menue landen; die direkten Buchstaben-Sprungziele innerhalb des
+  // bereits GEOEFFNETEN Menues (siehe runMenu(), eigene Buchstaben-Logik dort) sind davon nicht betroffen.
 }
 
 // Welche Zoomstufen und x-Bereiche liegen auf der Karte?
@@ -8041,9 +9091,11 @@ static int sondeRadioInit() {
   return RADIOLIB_ERR_NONE;
 }
 
-// Funk auf LoRa-APRS-Empfang stellen (433.775 MHz / SF12 / BW125 / CR4-5, siehe APRS_*-Defines).
+// Funk auf LoRa-APRS-Empfang stellen. Frequenz/Bandbreite/SF/CR kommen seit v4.87 aus den (im Menue
+// veraenderbaren, persistierten) loraFreqMHz/loraBwKHz/loraSf/loraCr -- Vorgabe ist die europaeische
+// LoRa-APRS-Konvention 433.775 MHz / BW125 / SF12 / CR4-5 (APRS_*-Defines, siehe dort).
 static int aprsRadioInit() {
-  int st = radio.begin(APRS_FREQ_MHZ, APRS_BW_KHZ, APRS_SF, APRS_CR, APRS_SYNCWORD, 2, APRS_PREAMBLE, TCXO_V);
+  int st = radio.begin(loraFreqMHz, loraBwKHz, loraSf, loraCr, APRS_SYNCWORD, 2, APRS_PREAMBLE, TCXO_V);
   Serial.printf("radio.begin (LoRa-APRS) -> %d\n", st);
   if (st != RADIOLIB_ERR_NONE) return st;
   radio.setDio2AsRfSwitch(true);
@@ -8064,6 +9116,7 @@ static void radioApplyMode() {
   aprsSoloIdx = -1;          // Einzelstations-Fokus (siehe dort) gehoert zur alten Liste, nicht mehr gueltig
   altTrackReset();           // Hoehentrack beim Moduswechsel neu beginnen (sonst alte Sonde ueber neuem Modus)
   loraTxOn = false;          // LoRa Upload nach jedem Moduswechsel immer aus (siehe loraTxOn-Deklaration)
+  loraPauseUntilMs = 0;      // eine laufende Kurzpause (Taste L) gehoert zum vorigen Modus, nicht mehr gueltig
   aprsBeaconLastSet = false; // Wegstrecke-Anker fuer den naechsten Upload verwerfen (gehoert zum vorigen Modus/Einschalten)
   restartRx = true;
   int st = (radioMode == 1) ? aprsRadioInit() : sondeRadioInit();
@@ -8448,7 +9501,8 @@ static bool aprsSendBeacon() {
                        FW_CALLSIGN, pos, altTxt, FW_VERSION);
   int len = 3 + tlen;
   radio.standby();
-  radio.setOutputPower(txPowerDbm);           // Menue D (MI_TXPWR) -- radio.begin() setzt bei jedem Moduswechsel
+  radio.setOutputPower(txPowerDbm);           // Menue U (MI_TXPWR; Kommentar hier korrigiert, siehe menuKey[] --
+                                               // war schon vorher 'u', nicht 'd') -- radio.begin() setzt bei jedem Moduswechsel
                                                 // wieder den RadioLib-Default (10 dBm), deshalb hier jedesmal neu
   int st = radio.transmit(pkt, (size_t)len);
   char m[160];
@@ -8490,6 +9544,42 @@ static void aprsSymbolTick() {
   if (aprsSymbolCand != aprsSymbolIdx && now - aprsSymbolCandSinceMs >= APRS_SYMBOL_HYST_MS) {
     aprsSymbolIdx = aprsSymbolCand;
   }
+}
+
+// Gemeinsamer Teil fuer "Pause beenden, LoRa Upload wieder an" -- genutzt sowohl beim normalen Ablauf
+// (loraPauseTick(), Countdown auf 0) als auch beim vorzeitigen Abbruch per Ruecktaste (Feature v4.94, siehe
+// handleInput()). msg erscheint im Toast ("wieder an (Pause vorbei)" bzw. "wieder an (Pause abgebrochen)").
+static void loraPauseEnd(const char *msg) {
+  loraPauseUntilMs = 0;
+  loraPauseLastWarnS = -1;
+  if (radioMode == 1 && !loraTxOn) {   // nur wieder an, wenn zwischenzeitlich nichts anderes entschieden wurde
+    loraTxOn = true;                   // (Menue A/Moduswechsel setzen loraPauseUntilMs=0, s.o.)
+    aprsBeaconNextMs = 0;
+    aprsBeaconLastSet = false;         // Wegstrecke-Anker neu, wie beim normalen Einschalten (Menue A)
+    saveSettings();
+    toastFor("LoRa Upload", msg, TOAST_MS_LONG);
+  }
+}
+
+// Feature v4.88/v4.89: Begleitet eine per Taste L gestartete LoRa-Upload-Kurzpause (siehe handleInput()/
+// loraPauseUntilMs-Deklaration) -- schaltet nach LORA_PAUSE_MS von selbst wieder an, mit kurzem Popup. In den
+// letzten LORA_PAUSE_WARN_S Sekunden piept es zusaetzlich einmal je Sekunde (bewusst UNABHAENGIG vom
+// Ton-an/aus-Zustand der Taste $/Menue X -- das ist eine selbst ausgeloeste Sicherheitswarnung, kein normaler
+// Empfangston), damit man rechtzeitig merkt, dass gleich wieder gesendet wird (z. B. beim Antennenwechsel).
+// Der Countdown/Fortschrittsbalken dazu steht im Statusblock, siehe drawLoraPause(). Seit v4.94 auch per
+// Ruecktaste vorzeitig abbrechbar, siehe handleInput()/loraPauseEnd().
+static void loraPauseTick() {
+  if (!loraPauseUntilMs) return;
+  int32_t remainMs = (int32_t)(loraPauseUntilMs - millis());
+  if (remainMs > 0) {
+    int remainS = (remainMs + 999) / 1000;              // aufgerundet, wie in drawLoraPause()
+    if (remainS <= LORA_PAUSE_WARN_S && remainS != loraPauseLastWarnS) {
+      loraPauseLastWarnS = remainS;
+      beepPlayHz(LORA_PAUSE_WARN_HZ);
+    }
+    return;
+  }
+  loraPauseEnd("wieder an (Pause vorbei)");
 }
 
 // Periodischer LoRa-Beacon im Hintergrund -- nur im LoRa-Modus mit eingeschaltetem Upload (Menue A).
@@ -8872,7 +9962,8 @@ static void bootSplash() {
   Adafruit_GFX *g = scr();
   g->fillScreen(ST77XX_BLACK);
   g->setTextWrap(false);
-  bootCenter(g, FW_CALLSIGN, 56, ST77XX_CYAN, 3, true);
+  bootCenter(g, FW_CALLSIGN, 56, COL_BOOT_CALLSIGN, 3, true);   // Feature v4.93: Farbe jetzt in settings.h (vorher
+                                                                 // fest ST77XX_CYAN), auf Wunsch jetzt rot
   char title[24];
   snprintf(title, sizeof(title), "T-Deck RS41 v%s", FW_VERSION);
   bootCenter(g, title, 112, ST77XX_WHITE, 2, true);
@@ -8892,12 +9983,96 @@ static void bootSplash() {
   delay(BOOT_SPLASH_MS);
 }
 
+// Feature v4.90: blockierende J/N-Abfrage, sobald der erste GPS-/NTP-Zeitstempel steht (aufgerufen aus
+// gpxEnsureIchId(), seit v4.92 bereits direkt aus onTimeSet()), falls der letzte "Ich"-Track laenger als
+// GPX_RESUME_GRACE_S, aber nicht aelter als GPX_RESUME_ASK_S zurueckliegt (settings.h, Default 24 h) --
+// typischer Anlass: Geraet drinnen bewusst ausgeschaltet (schlechter GPS-Empfang in Gebaeuden), nach laengerer
+// Zeit draussen wieder eingeschaltet. J = denselben Track fortsetzen, N = neuen Track anlegen. Countdown +
+// Fortschrittsbalken laufen bewusst formatfuellend ueber die komplette Seite (Wunsch Okt. 2026) -- reagiert
+// niemand innerhalb von GPX_RESUME_ASK_MS (settings.h), wird automatisch fortgesetzt (wie "J"), damit das
+// Geraet unbeaufsichtigt nicht an dieser Abfrage haengen bleibt.
+// Bewusst OHNE gpsPoll() in der Warteschleife (anders als das sonst gleich gebaute confirmLoraTxResume() in
+// setup()): diese Funktion kann ueber onTimeSet() aus der laufenden NMEA-Verarbeitung heraus aufgerufen werden
+// (Quelle "GPS", selbst schon mitten in gpsPoll()) -- ein gpsPoll() hier wuerde sich also verschachtelt selbst
+// aufrufen. Eingehende NMEA-Daten sammeln sich waehrenddessen einfach im UART-Puffer und werden gleich danach
+// im naechsten gpsPoll()-Aufruf aus loop() normal nachverarbeitet.
+static bool confirmGpxResumeAsk(uint32_t ageS) {
+  Adafruit_GFX *g = scr();
+  uint32_t startMs = millis();
+  uint32_t lastDrawS = 0xFFFFFFFFUL;
+  while (true) {
+    int e;
+    while ((e = pollInput()) != EV_NONE) {
+      int c = tolower(e);
+      if (c == 'j') return true;
+      if (c == 'n') return false;
+    }
+    uint32_t elapsed = millis() - startMs;
+    if (elapsed >= GPX_RESUME_ASK_MS) return true;      // Zeit abgelaufen -> wie "J", s. o.
+    uint32_t remainS = (GPX_RESUME_ASK_MS - elapsed + 999) / 1000;
+    if (remainS != lastDrawS) {
+      lastDrawS = remainS;
+      g->fillScreen(ST77XX_BLACK);
+      g->setTextWrap(false);
+      g->setTextSize(2);
+      g->setTextColor(ST77XX_YELLOW);
+      g->setCursor(6, 8);
+      g->print("Track fortsetzen?");
+      g->setTextSize(1);
+      g->setTextColor(ST77XX_CYAN);
+      char ag[48];
+      uint32_t ah = ageS / 3600, am = (ageS % 3600) / 60;
+      snprintf(ag, sizeof(ag), "Letzter Track vor %lu:%02lu h", (unsigned long)ah, (unsigned long)am);
+      g->setCursor(6, 32);
+      g->print(ag);
+      // Gross und nebeneinander (wie confirmLoraTxResume()) -- J (gruener Rahmen) links, N (roter Rahmen) rechts
+      g->drawRoundRect(8, 50, 148, 96, 8, ST77XX_GREEN);
+      g->setTextSize(5);
+      g->setTextColor(ST77XX_GREEN);
+      g->setCursor(58, 64);
+      g->print("J");
+      g->setTextSize(1);
+      g->setTextColor(ST77XX_WHITE);
+      g->setCursor(16, 122);
+      g->print("ja, fortsetzen");
+      g->drawRoundRect(164, 50, 148, 96, 8, ST77XX_RED);
+      g->setTextSize(5);
+      g->setTextColor(ST77XX_RED);
+      g->setCursor(214, 64);
+      g->print("N");
+      g->setTextSize(1);
+      g->setTextColor(ST77XX_WHITE);
+      g->setCursor(178, 122);
+      g->print("nein, neuer Track");
+      // Formatfuellender Countdown + Fortschrittsbalken ueber die komplette Breite (Wunsch Okt. 2026), beide
+      // Laengen aus GPX_RESUME_ASK_MS (settings.h) -- teilen sich bewusst dieselbe Konstante, siehe dort.
+      char ct[16];
+      snprintf(ct, sizeof(ct), "noch %lu s", (unsigned long)remainS);
+      g->setTextSize(3);
+      g->setTextColor(remainS <= 5 ? ST77XX_RED : ST77XX_ORANGE);
+      g->setCursor(8, 158);
+      g->print(ct);
+      g->drawRect(8, 198, 304, 22, ST77XX_WHITE);
+      int fill = (int)(((long)(GPX_RESUME_ASK_MS - elapsed) * 302L) / (long)GPX_RESUME_ASK_MS);
+      if (fill < 0) fill = 0; else if (fill > 302) fill = 302;
+      if (fill > 0) g->fillRect(9, 199, fill, 20, remainS <= 5 ? ST77XX_RED : ST77XX_ORANGE);
+      if (frameCanvas) blit(frameCanvas);
+    }
+    delay(20);
+  }
+}
+
 // Blockierende J/N-Abfrage beim Start, nur wenn radioMode == 1 (LoRa-APRS) und der LoRa-Beacon (loraTxWasOn,
 // siehe loadSettings()) beim letzten Mal aktiv war: loraTxOn selbst steht nach jedem Neustart erst mal auf aus
 // (s. Deklaration oben), damit nicht unbeabsichtigt gesendet wird -- hier kann man es aber bewusst wieder
 // anschalten, statt jedesmal von Hand ins Menue zu muessen. J = wieder aktivieren (mit der eingestellten
 // Sendeleistung, siehe txPowerDbm/MI_TXPWR -- aprsSendBeacon() wendet die ohnehin vor jedem Senden neu an),
 // N = aus (bzw. ausgeschaltet lassen).
+// Feature v4.94 (Wunsch Okt. 2026, "so einen Timeout wie beim GPX-Track, default dann NO"): reagiert niemand
+// innerhalb von LORA_TXRESUME_ASK_MS (settings.h), verfaellt die Abfrage automatisch auf "N" (NICHT senden) --
+// bewusst anders als confirmGpxResumeAsk() (dort Default "J"): dort ist die sichere Seite, den Track nicht zu
+// zerreissen, hier ist die sichere Seite, nicht unbeaufsichtigt zu senden (gleiche Grundregel wie loraTxOn
+// nach jedem Neustart erst mal aus, s. o.).
 static void confirmLoraTxResume() {
   Adafruit_GFX *g = scr();
   g->fillScreen(ST77XX_BLACK);
@@ -8934,28 +10109,61 @@ static void confirmLoraTxResume() {
   g->setTextColor(ST77XX_WHITE);
   g->setCursor(178, 160);
   g->print("nein, aus lassen");
-  if (frameCanvas) blit(frameCanvas);
+  uint32_t startMs = millis();
+  uint32_t lastDrawS = 0xFFFFFFFFUL;
   while (true) {
     int e;
-    do { gpsPoll(); e = pollInput(); if (e == EV_NONE) delay(5); } while (e == EV_NONE);
-    int c = tolower(e);
-    if (c == 'j') {
-      loraTxOn = true;
-      aprsBeaconNextMs = 0; aprsBeaconLastSet = false;    // gleich die erste eigene Position senden, Wegstrecke-Anker neu
-      saveSettings();
-      return;
+    while ((e = pollInput()) != EV_NONE) {
+      int c = tolower(e);
+      if (c == 'j') {
+        loraTxOn = true;
+        aprsBeaconNextMs = 0; aprsBeaconLastSet = false;  // gleich die erste eigene Position senden, Wegstrecke-Anker neu
+        saveSettings();
+        return;
+      }
+      if (c == 'n') {
+        loraTxOn = false;
+        loraTxWasOn = false;                              // bewusst abgelehnt -- beim naechsten Start nicht wieder fragen
+        saveSettings();
+        return;
+      }
     }
-    if (c == 'n') {
+    gpsPoll();
+    uint32_t elapsed = millis() - startMs;
+    if (elapsed >= LORA_TXRESUME_ASK_MS) {                // Timeout -> wie "N" (s. o.)
       loraTxOn = false;
-      loraTxWasOn = false;                                // bewusst abgelehnt -- beim naechsten Start nicht wieder fragen
+      loraTxWasOn = false;
       saveSettings();
       return;
     }
+    uint32_t remainS = (LORA_TXRESUME_ASK_MS - elapsed + 999) / 1000;
+    if (remainS != lastDrawS) {
+      lastDrawS = remainS;
+      char ct[28];
+      snprintf(ct, sizeof(ct), "automatisch NEIN in %lu s", (unsigned long)remainS);
+      g->fillRect(6, 200, 310, 11, ST77XX_BLACK);
+      g->setTextSize(1);
+      g->setTextColor(0x8410);
+      g->setCursor(6, 202);
+      g->print(ct);
+      g->drawRect(6, 216, 308, 10, ST77XX_WHITE);
+      int fill = (int)(((long)(LORA_TXRESUME_ASK_MS - elapsed) * 306L) / (long)LORA_TXRESUME_ASK_MS);
+      if (fill < 0) fill = 0; else if (fill > 306) fill = 306;
+      g->fillRect(7, 217, 306 - fill, 8, ST77XX_BLACK);   // schrumpft von rechts (Rest bis zum Timeout), statt
+                                                            // wie sonst ueblich von links zu wachsen -- hier ist
+                                                            // "voll" der Start, nicht das Ziel
+      if (fill > 0) g->fillRect(7 + (306 - fill), 217, fill, 8, 0x8410);
+      if (frameCanvas) blit(frameCanvas);
+    }
+    delay(5);
   }
 }
 
 // ---------- Setup / Loop ----------
 void setup() {
+  cfgCaptureDefaults();   // Feature v4.95: Compile-Defaults der config.ini-Werte sichern, BEVOR irgendetwas
+                          // (insbesondere applyConfigIniFromSd() weiter unten) sie evtl. ueberschreibt --
+                          // einzige Quelle fuer "Auf Werkseinstellungen zuruecksetzen" im Webformular
   // GPIO10 (PIN_POWER_ON) schaltet laut LilyGO die Stromversorgung der Peripherie (u. a. die I2C-Tastatur/
   // den Trackball, siehe weiter unten bei PIN_POWER_ON = LOW zum Abschalten). Bei einem echten Hardware-
   // Reset (EN-Pin, z. B. nach seriellem Upload) ist diese Leitung dabei kurz stromlos -- die Peripherie
@@ -9078,6 +10286,7 @@ void setup() {
   batteryTick();
 
   line(24, sdInit() ? "SD-Karte OK" : "SD-Karte nicht lesbar (Karte aus)", sdReady ? ST77XX_GREEN : ST77XX_ORANGE);
+  if (sdReady) applyConfigIniFromSd();          // Feature v4.95: evtl. zuvor per Web gespeicherte config.ini jetzt anwenden
   if (sdLogOn && sdReady) startLog();           // frisches Log fuer diesen Start, zunaechst unter Platzhaltername
                                                  // (Datum/Zeit folgt per onTimeSet(), sobald GPS/NTP eine Uhrzeit liefert)
   if (sdReady) {                                // welche Kartenarten liegen auf der Karte?
@@ -9094,6 +10303,9 @@ void setup() {
   // inputBegin()/gpio_reset_pin() im Changelog oben): WiFi.begin() zieht beim Einschalten des Radios kurz
   // deutlich mehr Strom, ein moeglicher Brownout-/Buskollisions-Kandidat bei Akku + Display + LoRa + SD + I2C
   // gleichzeitig aktiv. WiFi startet daher erst, nachdem die I2C-Tastatur/der Trackball sauber durch sind.
+  // Boot-WLAN-Sequenz (Feature v4.88, siehe wifiBootSeq-Deklaration): Heimnetz versuchen, wenn bekannt --
+  // sonst gleich die Boot-Hotspot-Phase. wifiTick()/wifiBootApTick() fuehren die Sequenz in loop() fort.
+  wifiBootSeq = true;
   if (wifiSsid[0]) {                                    // Heimnetz bekannt: gleich verbinden -- Fundmeldungen absetzen und/oder
     bool haveRecovery = sdReady && recoveryCount() > 0; // per NTP die Uhrzeit holen, bis das GPS selbst einen Fix hat; bleibt an,
     char m[80];                                         // solange die Verbindung steht (sonst mit am Strom, keine Akkusorge)
@@ -9103,6 +10315,10 @@ void setup() {
     wifiSet(1);                                   // nur die Verbindung anstossen, laeuft nicht-blockierend weiter (wifiTick())
     ntpWanted = true;
     ntpConfigured = false;
+  } else {                                              // kein Heimnetz bekannt: gleich die Boot-Hotspot-Phase oeffnen
+    logLine("WLAN: kein Heimnetz bekannt, oeffne Boot-Zugangspunkt");
+    wifiSet(2);
+    wifiBootApStartMs = millis();
   }
   // LoRa-Beacon war beim letzten Mal aktiv -- J/N abfragen, AUSSER der Neustart kam von einem Firmware-Upload
   // (ESP_RST_SW: Software-Neustart, z. B. durch ArduinoOTA/USB-Flash direkt vor diesem Boot). In dem Fall hat
@@ -9128,6 +10344,12 @@ void setup() {
 void loop() {
   restartRx = false;
   if (radioModeChanged) { radioModeChanged = false; radioApplyMode(); }
+  if (loraParamsChanged) {                          // Feature v4.87: LoRa-Funkparameter im Menue geaendert --
+    loraParamsChanged = false;                       // nur den Funk neu initialisieren, keine weiteren
+    radio.standby();                                 // Seiteneffekte (siehe loraParamsChanged-Deklaration)
+    aprsRadioInit();
+    logLine("LoRa: Funkparameter geaendert, Funk neu initialisiert");
+  }
   gpsPoll();
   handleInput();
   if (mapMode) gfxUpdate();                          // Sonde ohne Empfang: Punkt wird gelb/rot; ohne Sonde: Karte um die eigene Position
