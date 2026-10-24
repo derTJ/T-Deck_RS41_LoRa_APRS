@@ -1,13 +1,11 @@
+// Version 6.7.2
 // T-Deck Plus – RS41 Empfang v2 (SX1262, FSK)
 //
 // ===========================================================================
 // VOR DEM ERSTEN COMPILIEREN:
 //   config.h.example im selben Ordner nach config.h kopieren und darin das
 //   eigene Rufzeichen sowie die eigenen Heimat-Koordinaten eintragen.
-//   config.h ist persoenlich (steht in .gitignore, landet NICHT auf GitHub).
-//   settings.h muss ebenfalls im selben Ordner liegen (eigener Tab in der
-//   Arduino-IDE) -- anders als config.h ist sie NICHT persoenlich und wird
-//   normal mitgeliefert/committet; sie sammelt alle allgemein einstellbaren
+//   settings.h muss ebenfalls im selben Ordner liegen, sie sammelt alle allgemein einstellbaren
 //   Werte (Timings, Schwellwerte, Popup-Anzeigedauern, Farben, WLAN usw.).
 // ===========================================================================
 //
@@ -23,7 +21,7 @@
 //  - GPS-Radar (eigene Ansicht): Polarplot der einzelnen Satelliten (Azimut/Elevation aus $--GSV), Mitte =
 //    Zenit, Ringe alle 30 Grad bis zum Horizont am Rand, dazu eine Textliste mit PRN/Elevation/Azimut/SNR.
 //    Im Menue waehlt der Buchstabe nur den Punkt (S Suche, F Frequenz, B Bandbreite, K Fehlerkorrektur,
-//    I Funkmodus, V Vorhersage, L Landehoehe, Z Zoom, Y Zoomschritt, G Scroll-Empfindlichkeit, O Eigener Track, X Ton, M Kartenart, H Helligkeit,
+//    I Funkmodus, # Sondentyp, * RS41-Empfang, + Lautstaerke, V Vorhersage, L Landehoehe, Z Zoom, Y Zoomschritt, G Scroll-Empfindlichkeit, O Eigener Track, X Ton, M Kartenart, H Helligkeit,
 //    T Tastenlicht, J GPX-Aufzeichnung, P SD-Log, W WLAN, E Netz, Q Herunterfahren).
 //  - Sonde gefunden (Taste Q, ausserhalb des Menues): sendet Sonden-ID, Position zum Zeitpunkt des
 //    Tastendrucks (= letzte empfangene Sondenposition), Melder-Name (wird abgefragt/gemerkt) und einen
@@ -63,7 +61,7 @@
 //    bekommen Punkt + Rufzeichen + eine auf 5 km gekappte Spur. Menue A ("SondeHub-Upload") ist im LoRa-Modus
 //    umgewidmet zu "LoRa Upload": schickt die eigene Position als APRS-Beacon -- nur ueber das Funkmodul,
 //    keine Internetverbindung. Sendeintervall dynamisch nach Tempo (SmartBeaconing): im Stand/<=10 km/h
-//    alle 30 min, >10 km/h alle 2 min, >50 km/h alle 30 s, zusaetzlich sofort bei zurueckgelegter Strecke
+//    alle 30 min, >10 km/h alle 1 min, >50 km/h alle 30 s, zusaetzlich sofort bei zurueckgelegter Strecke
 //    seit dem letzten Beacon (<=10 km/h/zu Fuss: 100 m, sonst 1 km) -- je nachdem, was zuerst zutrifft
 //    (siehe aprsBeaconTick()). Taucht eine Station NEU in der Liste auf (vorher unbekannt oder laenger als
 //    APRS_MAX_AGE_MS nicht gehoert), piept es zusaetzlich zum normalen Empfangston kurz auf -- hoeher bei
@@ -639,7 +637,52 @@
 //       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
 //       entsprechend mitgezogen.
 //
-//  - v4.95 (Wunsch Okt. 2026, "settings auch als ini ins dateisystem machen, updatebar per upload"): ein
+//  - v6.7.2 (Okt. 2026): Kompilierfehler behoben (unmaskierte Anfuehrungszeichen im Kopfkommentar-Text der config.ini).
+//  - v6.7.1 (Okt. 2026): APRS_MAX_AGE_S darf jetzt bis 72 Stunden betragen (vorher 2 h); ist die Stationsliste voll (APRS_MAX = 32),
+//    wird wie bisher die am laengsten nicht gehoerte Station ersetzt.
+//  - v6.7.0 (Okt. 2026): Zeiteingabe/-ausgabe in config.ini, Editor und Weboberflaeche neu geregelt: Ganzzahlen und Kommazahlen = Sekunden
+//    (".1" = 100 ms), mit Doppelpunkt [hh]:[mm[:ss[.ttt]]] (Stunden stehen vor dem ersten Doppelpunkt, fuehrender Doppelpunkt = Minuten,
+//    alle Folgestellen optional); Ausgabe ueber 60 s als hh:mm:ss.ttt (Punkt statt Doppelpunkt vor den Millisekunden). GPX_RESUME_GRACE_S/
+//    GPX_RESUME_ASK_S (intern Sekunden) werden jetzt ebenfalls so ausgegeben, Zeiten ausserhalb des Bereichs auf die Grenze gesetzt (vorher 86400). Kommazahlen ohne "3e+04" (TAWHIRI_BURST_ALT_...).
+//  - v6.6.3 (Okt. 2026): Auch Anzeige, eigener Track und GPX uebernehmen Fixe erst nach GPS_SEND_MIN_EPOCHS Fixen in Folge (ohne
+//    "kein Fix" dazwischen) und mit plausiblem Tempo (<= GPS_MAX_SPEED_MS); nur bei eingeschaltetem GPS-Filter (Menue /).
+//  - v6.6.2 (Okt. 2026): Fehler behoben: Beacon/SondeHub-Upload sendeten im Haus bei wackeligem GPS (Fix/"kein Fix" im Wechsel,
+//    3..7 Sat, HDOP 2.4..3.2) Positionen bis 30 km daneben mit 200..330 km/h und Hoehe -223..-387 m. Neu: GPS_SEND_MIN_EPOCHS
+//    (Standard 3) aufeinanderfolgende gute Fixe noetig (nach jedem "kein Fix" von vorn) und gemeldetes Tempo <= GPS_MAX_SPEED_MS.
+//  - v6.6.1 (Okt. 2026): Fehler behoben: Anzeige blieb auf der Karte bei 20 km/h/Fahrrad-Symbol haengen (Hoehe aenderte sich weiter).
+//    Ursache war die Testtaste N (Karte, erzwingt Tempo 20 km/h), die bis zum erneuten Druck aktiv blieb und bei versehentlichem
+//    Druck auch den LoRa-Beacon (Takt/Symbol) beeinflusste. Das Testtempo endet jetzt nach 30 s von selbst.
+//  - v6.6.0 (Okt. 2026): Zeitwerte ueber 60 s werden in config.ini/Editor/Weboberflaeche als hh:mm:ss:ttt ausgegeben (ttt = Millisekunden,
+//    z. B. 00:02:00:000); bis 60 s weiterhin als Sekunden (3.456). Eingelesen wird zusaetzlich zu den bisherigen Formen auch hh:mm:ss:ttt.
+//  - v6.5.0 (Okt. 2026): GPS-Filter (Ausreisserfilter fuer eigene Position/Hoehe, gpsFilterFix()) per Menuepunkt "GPS-Filter"
+//    (Taste /) und Weboberflaeche ein-/ausschaltbar; auch in config.ini (GPS_FILTER=0/1). Aus = Rohwerte des GPS-Moduls.
+//  - v6.4.0 (Okt. 2026): Zeitwerte in config.ini jetzt in SEKUNDEN statt Millisekunden (Namen *_MS -> *_S, z. B. WIFI_LOST_S=10;
+//    3456 ms = 3.456 bzw. 3,456). Eingabe auch mit Einheit (3.456s, 3456ms) oder als mm:ss / hh:mm:ss (auch 1:02:03.5);
+//    intern und im restlichen Code unveraendert in ms (neuer Typ CFG_MS, cfgParseTimeMs()). Alte Dateien mit *_MS-Schluesseln
+//    werden weiter gelesen (Wert = Millisekunden) und beim naechsten Speichern auf die neuen Namen umgeschrieben.
+//    GPX_RESUME_ASK_MS heisst jetzt GPX_RESUME_ASK_TIMEOUT_S (GPX_RESUME_ASK_S gab es schon als Alter-Grenze).
+//  - v6.3.0 (Okt. 2026): neuer Menuepunkt "Lautstaerke" (Taste +, in beiden Funkmodi): 0..100 % fuer ALLE Toene (Empfangs-,
+//    Sende- und Stationston), wirkt quadratisch auf die Amplitude, wird gespeichert; beim Verstellen kommt ein Probeton.
+//    Der Fortsetzungs-Modus (RS41_ONESYNC=2) ist entfernt, da der zweite Sync im Frame zuverlaessig funktioniert; ein
+//    gespeicherter Wert 2 in /config.ini ist ungueltig und wird auf 1 gesetzt. RS41-Empfang im Menue: nur noch 2 Stufen.
+//  - v6.2.0 (Okt. 2026): neuer Menuepunkt "RS41-Empfang" (Taste *, nur im Sondenempfang): 2 Schritte / 2. Sync im Frame
+//    (= RS41_ONESYNC 0/1, auch in /config.ini gespeichert).
+//  - v6.1.1 (Okt. 2026, Fehlerbehebung): Auswertung des Logs vom 24.10. (Testsonde ganz nah): nur jeder ZWEITE Frame kam
+//    an (Frame-Nr. sprang in 246 von 325 Faellen um 2). Ursache: der Einzel-Sync-Weg (Fortsetzung ohne Sync, Bit-
+//    Versatz-Suche) griff offenbar nicht, es lief der Rueckfall auf Schritt 2 im NAECHSTEN Frame -- danach war der
+//    Empfaenger erst fuer den uebernaechsten Frame wieder bereit. Neu: RS41_ONESYNC=1 (Standard) = zweiter, kurzer
+//    Sync im SELBEN Frame auf den Positionsblock 0x7B (Punkt 17); der Fortsetzungs-Modus bleibt als RS41_ONESYNC=2
+//    waehlbar. Die Logzeile zeigt den Weg: [S3] / [S3->S2] / [1S] / [1S->S2] / [S2].
+//  - v6.1.0 (Okt. 2026): neuer Menuepunkt "Sondentyp" (Taste #, weil alle Buchstaben vergeben sind; nur im Sondenempfang): nur RS41 / RS41 + DFM / nur DFM
+//    (= Einstellung SONDE_TYPES; die Wahl wird auch in /config.ini auf der SD-Karte gespeichert).
+//  - v6.0.0 (Okt. 2026): DFM-06/09/17 zusaetzlich zum RS41 (Punkt 16 unten), RS41 mit einem Sync (Punkt 14, laut Log
+//    vom 24.10. funktionsfaehig), Weboberflaeche: Loeschen/ZIP in Paketen (Punkt 15, Loeschen bestaetigt). Die Punkte
+//    11-16 stehen im folgenden v5.0-Block, weil sie dort fortlaufend nummeriert wurden.
+//    VERSIONIERUNG ab jetzt (Wunsch Okt. 2026): X.Y.Z -- Fehlerbehebung: Z hoch; Feature-Aenderung (Menue, Bedienung): Y hoch;
+//    komplett neues Feature (z. B. neuer Sondentyp): X hoch. Die Versionsnummer steht auch in der ersten Zeile dieser Datei.
+//
+//  - v5.0 (Sprung von v4.95, da inzwischen einiges zusammengekommen ist -- Wunsch Okt. 2026, "settings auch
+//    als ini ins dateisystem machen, updatebar per upload"): ein
 //    Grossteil der "weichen" Werte aus settings.h (Timings, Schwellwerte, Farben, Transparenz, Toene -- NICHT
 //    Pins, Funkprotokoll-Parameter oder die zusammenhaengenden RS41-Scan-Parameter, siehe Kommentar dort) steht
 //    jetzt zusaetzlich in /config.ini auf der SD-Karte und ist darueber zur LAUFZEIT aenderbar, ohne neu zu
@@ -680,6 +723,63 @@
 //       (die Anzeige der Werteanzahl ("X Werte") daneben entfernt, unnoetige Info). Dabei BUG behoben: der
 //       Zeilenpuffer fuer Menuenamen (char nm[24] in drawMenu()) schnitt den laengeren Text hart ab (sichtbar
 //       hinter ".ini") -- auf 40 Byte vergroessert.
+//    10) Trackballklick (LoRa-APRS "Sofort senden", siehe handleInput()) wechselte bisher zusaetzlich die Ansicht,
+//        wenn gerade nicht gesendet werden konnte (Wunsch Okt. 2026, "irritiert") -- macht er jetzt nicht mehr,
+//        stattdessen IMMER ein erklaerender Toast statt stillschweigend die Ansicht zu wechseln: "nicht im
+//        LoRa-APRS-Modus" (Sondenmodus), "eigener Beacon aus" (Menue A) oder "kein aktueller GPS-Fix" (wie bisher).
+//        Ansicht wechseln bleibt weiterhin Sache der Leertaste.
+//    11) BUG behoben: Akkuanzeige (batPercent()) zeigte selbst bei vollem/fast vollem Akku schon nach kurzer
+//        Zeit nur noch 13-20% (Wunsch/Meldung Okt. 2026, "Akkuberechnung passt irgendwie garnicht mehr") --
+//        der Kurvenbereich oberhalb der vier ECHT gemessenen unteren Ankerpunkte (3.49/3.41/3.35/2.90 V, siehe
+//        Kommentar dort) war nie gemessen, nur grob geschaetzt und viel zu steil. Jetzt deutlich weiter
+//        auseinandergezogen (3.73 V zeigt jetzt 40% statt vorher 20%), die vier echt gemessenen unteren Punkte
+//        unveraendert gelassen.
+//    12) Akkuanzeige (drawBattery(), Wunsch Okt. 2026, "Akkukapazitaet im Wechsel (2 sek) mit der gemessenen
+//        Spannung anzeigen") wechselt die Textzahl jetzt alle 2 s zwischen Prozent/"USB" (wie bisher) und der
+//        rohen gemessenen Spannung (batV, Format "x.xx" ohne Einheit) -- so laesst sich die neue Prozentkurve
+//        (siehe Punkt 11) direkt gegen den Messwert gegenpruefen, ohne extra ins Log zu schauen.
+//    13) Weboberflaeche, Dateiliste (Meldung Okt. 2026, "Loeschen mehrerer Dateien oder Download via Website
+//        funktioniert nicht mehr, im Trace kommt ein HTTP 303 Error"): die Loeschantworten (/d, /dm) schicken
+//        keine 303-Weiterleitung mehr, sondern eine normale 200-Seite mit Ergebnis ("N Datei(en) geloescht")
+//        und Meta-Refresh zurueck auf "/" (webDeletedPage()). Zusaetzlich loggen /dm, /d und /zm jetzt, was
+//        bei ihnen ankommt (Anzahl Felder/ausgewaehlt/geloescht), damit sich ein erneuter Fehler im Log
+//        eingrenzen laesst. Die eigentliche Ursache beim ZIP-Download ist damit NICHT bestaetigt -- der
+//        Handler selbst schickt nie ein 303.
+//    14) RS41 mit EINEM Sync (Wunsch Okt. 2026, Hinweis auf dl9rdz/rdz_ttgo_sonde, die den RS41 ohne zweiten
+//        Sync decodiert): neue Einstellung RS41_ONESYNC (Standard 1, 0 = altes Zwei-Schritt-Verfahren).
+//        Schritt 1 holt jetzt 255 Bytes (Maximum des SX1262, PayloadLength = 8 Bit), danach wird SOFORT ohne
+//        Sync und ohne Praeambel-Detektor weiter aufgenommen (armCont(), 60 Bytes). Die unbekannte Luecke
+//        (Auslesen/Umschalten, wenige ms) wird per Bit-Versatz-Suche gefunden (contAlign()): gesucht wird der
+//        Versatz, bei dem Block 0x7B an 0x112 mit gueltiger CRC steht (Fehlalarm-Wahrscheinlichkeit ~1e-8).
+//        Scheitert das, greift automatisch das alte Schritt-2-Verfahren. Das Log zeigt Luecke in Bit, Zeit
+//        RxDone->scharf und eine Treffer-Statistik. WICHTIG: UNGETESTET auf echter Hardware. Quelle der Idee:
+//        https://github.com/dl9rdz/rdz_ttgo_sonde (dl9rdz, GPL; dort SX127x mit Langpaket). Es wurde kein Code
+//        von dort uebernommen, nur das Prinzip "ein Sync fuer den ganzen Frame". Der SX1262 selbst kann
+//        hardwarebedingt nur 255 Byte pro Paket, daher die Fortsetzungs-Aufnahme.
+//    17) RS41_ONESYNC jetzt 0/1/2: 0 = altes Schritt-2-Verfahren (naechster Frame), 1 = zweiter Sync im selben Frame
+//        auf 0x7B (Standard, siehe v6.1.1), 2 = Fortsetzung ohne Sync mit Bit-Versatz-Suche (Punkt 14).
+//    15) Weboberflaeche, Dateiliste (Meldung Okt. 2026, "Loeschen und Download mit den 2 Buttons geht immer
+//        noch nicht, er schreibt es waeren keine Dateien ausgewaehlt ... kann JavaScript das nicht im
+//        Hintergrund machen?"): die beiden Knoepfe senden die angehakten Namen jetzt per fetch() im Hintergrund
+//        (Text-Body, ein Name je Zeile, Argument "plain") statt per Formular-POST; Loeschen zeigt das Ergebnis
+//        per Meldung und laedt die Liste neu, der ZIP-Download kommt als Blob und wird direkt gespeichert.
+//        Der Server nimmt weiterhin auch die alten "del"-Felder an (collectSelected()) und loggt, wie viele
+//        Namen bei /dm bzw. /zm ankamen.
+//        NACHBESSERUNG (derselbe Tag): auch der Text-Body kam nicht an ("Keine Datei ausgewaehlt" vom Server,
+//        obwohl alles angehakt war -- bei ~300 Dateien ein Body von ca. 8-11 kB). Deshalb gehen die Namen jetzt in
+//        kleinen GET-Paketen (je 12 im Query-String): Loeschen ueber /dg (Pakete + /dg?fin=1), ZIP ueber /zs
+//        (vormerken) und danach /zz (normaler Download). Kein grosser POST-Body mehr noetig.
+//    16) Version 6.0.0: DFM-06/09/17 (Graw) zusaetzlich zum RS41 (Wunsch Okt. 2026, "koennen wir dann mehr
+//        Sondentypen decodieren?"). Neue Einstellung SONDE_TYPES (0 nur RS41, 1 RS41 + DFM = Standard, 2 nur DFM).
+//        Bei jedem Kandidaten/jeder festen Frequenz werden die Decoder nacheinander probiert, der zuletzt
+//        erfolgreiche zuerst (trackAny()). DFM: 2500 Rohbit/s, 16-Bit-Sync beider Polaritaeten abwechselnd,
+//        je Frame 66 Rohbytes, Entschachtelung, Hamming(8,4) mit 1-Bit-Korrektur, Lat/Lon/Hoehe/Tempo/Richtung/
+//        Steigrate, ID- und Typerkennung (DFM6/DFM9/DF17/..), Anbindung an Karte, GPX, Landevorhersage.
+//        QUELLE/REFERENZ: https://github.com/dl9rdz/rdz_ttgo_sonde (dl9rdz, RX_FSK/src/DFM.cpp, GPL-2.0+),
+//        dort nach oe5dxl (dxlaprs) -- das Verfahren und die Auswertung sind von dort uebernommen, der Code fuer
+//        SX1262/RadioLib neu geschrieben. UNGETESTET an echter Hardware. Einschraenkungen: keine Temperatur-/
+//        Druck-/Akku-Werte; die DFM-ID ist "D"+Nummer (nicht identisch mit der SondeHub-Seriennummer), der
+//        Fundmeldung (Taste Q) sollte man bei DFM daher nicht trauen.
 //
 // Frame-Positionen (Offsets im Frame inkl. 8 Byte Header) nach rs1729/RS:
 //   0x39 Statusblock (0x79), 0x3B Framenummer, 0x3D Sonden-ID (8 Zeichen),
@@ -817,7 +917,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "4.95"  // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "6.7.2"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -890,7 +990,15 @@ static const uint8_t loraCrList[4] = {5, 6, 7, 8};                // gueltige Co
 // SCAN_SWEEPS/FINE_MARGIN/ACQ_MS/LOST_MS/STICKY_MS/SV_MIN/SETTLE_US) -- siehe settings.h
 
 #define FRAME_LEN  320      // Laenge eines normalen RS41-Frames
-#define CAP1_LEN   180      // Schritt 1: Bytes nach dem Header (Frame-Pos. 8..187)
+#define CAP1_LEN   180      // Schritt 1 (klassischer Zwei-Schritt-Weg): Bytes nach dem Header (Frame-Pos. 8..187)
+// Modus RS41_ONESYNC=1 (Standard seit 6.1.1; der frueher erprobte Fortsetzungs-Modus 2 wurde in 6.3.0 entfernt): Schritt 1 wie klassisch (CAP1_LEN Bytes), danach SOFORT ein zweiter,
+// kurzer Sync IM SELBEN Frame auf die Kopfbytes des Positionsblocks 0x7B (Frame-Pos. 0x112, Laenge 0x15), dann der Rest.
+// Vorteil: kein Verlust jedes zweiten Frames (der alte Schritt 2 lag im NAECHSTEN Frame) und kein Bit-Versatz-Raten.
+#define SYNC3_POS  0x112
+#define SYNC3_ID   0x7B
+#define SYNC3_LEN  0x15
+#define CAP3_LEN   (FRAME_LEN - (SYNC3_POS + 2))   // 44 Bytes
+
 // Schritt 2 (im NAECHSTEN Frame): Sync auf ID/Laenge des Blocks 0x7D bei Frame-Position 0xB5
 // (bei dieser Sonde per Log bestaetigt), danach der Rest des Frames bis Position 319.
 #define SYNC2_POS  0xB5
@@ -919,12 +1027,17 @@ SX1262 radio = new Module(PIN_LORA_CS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUS
 Adafruit_ST7789 tft(&SPI, PIN_TFT_CS, PIN_TFT_DC, -1);
 
 volatile bool rxFlag = false;
-void IRAM_ATTR onRx() { rxFlag = true; }
+volatile uint32_t rxIsrUs = 0;   // Zeitstempel des letzten RxDone (fuer die Luecken-Messung im Einzel-Sync-Modus)
+void IRAM_ATTR onRx() { rxFlag = true; rxIsrUs = micros(); }
+uint32_t contArmUs = 0;          // Zeitstempel, wann die Fortsetzungs-Aufnahme scharf war
+int cap1Len = CAP1_LEN;          // Laenge von Schritt 1 (immer CAP1_LEN)
+uint32_t contTry = 0, contHit = 0;   // Statistik zweiter Sync im Frame: Versuche / erfolgreich
 
 float spec[NCOARSE];
 float candF[MAX_CAND], candR[MAX_CAND];
 bool isCand[NCOARSE];
 uint8_t raw1[CAP1_LEN];
+uint8_t raw3[CAP3_LEN];         // Rest des Frames nach dem zweiten Sync (ab 0x114)
 uint8_t raw2[CAP2_LEN];
 uint8_t fr[FRAME_LEN];          // entwuerfelter Frame, Index = Frame-Position
 uint32_t frameCount = 0;
@@ -938,6 +1051,7 @@ static float lastRxFreq = 0;            // Frequenz, auf der zuletzt tatsaechlic
 static bool predOn = true;              // Landevorhersage an/aus
 static double landAlt = 100.0;          // Landehoehe fuer die Vorhersage (Startwert LAND_ALT_DEFAULT)
 static bool ownTrailOn = true;          // eigenen Track (GPS des T-Deck) in der Karte zeichnen (Menue O)
+static uint8_t beepVol = 100;           // Lautstaerke aller Toene in Prozent (Menue +), 0 = stumm, 100 = wie bisher
 static uint8_t beepSec = 0;             // Empfangston (Menue X): 0 aus, 1 bei jedem gueltigen Paket, 5..20 alle N Sekunden waehrend des Empfangs
 static uint8_t beepSecMute = 5;         // fuer die $-Taste (Ton direkt an/aus): der Wert, zu dem "an" zurueckkehrt
 static uint8_t panPx = 5;               // Scroll-Empfindlichkeit: Kartenpixel pro Trackball-Impuls (Menue G)
@@ -1817,6 +1931,13 @@ static bool posJumpOk(double refLat, double refLon, uint32_t refMs, double lat, 
 static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double &fLon, float &fAlt) {
   uint32_t now = millis();
 
+  if (!GPS_FILTER) {                                 // Filter abgeschaltet (Menue "GPS-Filter"/GPS_FILTER=0): Rohwerte durchreichen
+    ownFiltValid = true; ownFiltLat = lat; ownFiltLon = lon; ownFiltMs = now; ownPendValid = false;
+    ownAltFiltValid = true; ownAltFiltVal = alt; ownAltFiltMs = now; ownAltPendValid = false;
+    fLat = lat; fLon = lon; fAlt = alt;
+    return true;
+  }
+
   // --- Position ---
   bool posOk;
   if (!ownFiltValid) {                               // allererster Fix: ungeprueft uebernehmen
@@ -1921,8 +2042,17 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
 // Die Sat-Zahl bleibt nur noch als grobe Untergrenze (das theoretische Minimum fuer einen 3D-Fix), die
 // eigentliche Entscheidung trifft HDOP. hdop <= 0 heisst "noch kein HDOP-Wert vorhanden" und gilt als schlecht.
 // GPS_SEND_MIN_SATS/GPS_SEND_MAX_HDOP -- siehe settings.h
+// ZUSAETZLICH (v6.6.2): Log vom 24.10. -- im Haus lieferte das Modul zwischen "kein Fix" immer wieder einzelne
+// Fixe (3..7 Sat, HDOP 2.4..3.2) mit voellig falscher Position (6..30 km daneben), absurdem Tempo (200..330 km/h) und
+// Hoehe -387..-223 m, die Beacon und SondeHub-Upload erreichten (4 Sat/HDOP 2.5 liegt genau an der Grenze). Jetzt
+// muss der Fix mindestens GPS_SEND_MIN_EPOCHS aufeinanderfolgende gute Messepochen in Folge liefern (jede "kein Fix"-
+// Epoche setzt den Zaehler zurueck) und das gemeldete Tempo darf GPS_MAX_SPEED_MS nicht ueberschreiten.
+static uint8_t gpsFixStreak = 0;                     // aufeinanderfolgende Epochen mit Fix (egal welcher Guete) -- fuer Anzeige/GPX
+static uint8_t gpsGoodStreak = 0;                    // aufeinanderfolgende Epochen mit gutem Fix (Sat/HDOP/Tempo)
+static bool gpsEpochTrusted = true;                  // Ergebnis der Vertrauenspruefung der laufenden Epoche (siehe parseNmea())
 static bool gpsFixGoodEnoughToSend() {
-  return gps.fix && gps.sats >= GPS_SEND_MIN_SATS && gps.hdop > 0 && gps.hdop <= GPS_SEND_MAX_HDOP;
+  return gps.fix && gps.sats >= GPS_SEND_MIN_SATS && gps.hdop > 0 && gps.hdop <= GPS_SEND_MAX_HDOP &&
+         gpsGoodStreak >= GPS_SEND_MIN_EPOCHS && gps.speedKmh <= GPS_MAX_SPEED_MS * 3.6f;
 }
 
 // Prueft die NMEA-Pruefsumme (XOR aller Bytes zwischen '$' und '*', als 2 Hexziffern danach). Ohne diese
@@ -2014,7 +2144,22 @@ static void parseNmea(char *s) {
     double rawLat = nmeaToDeg(f[2], f[3][0]);
     double rawLon = nmeaToDeg(f[4], f[5][0]);
     float rawAlt = atof(f[9]);
-    if (sameEpoch) {                                  // genauere Verfeinerung derselben Epoche: direkt uebernehmen,
+    // Anzeige/Spur/GPX nur mit vertrauenswuerdigen Fixen (v6.6.3): erst nach GPS_SEND_MIN_EPOCHS Fixen in Folge ohne
+    // zwischenzeitliches "kein Fix" und mit plausiblem Tempo -- sonst landen die Einzel-Fehlfixe aus dem Haus (Log 24.10.:
+    // 6..60 km daneben, 200..330 km/h, Hoehe -223..-387 m) in Karte, GPX und eigenem Track. Nur bei GPS_FILTER=1.
+    bool trusted = !GPS_FILTER || (gpsFixStreak >= GPS_SEND_MIN_EPOCHS && gps.speedKmh <= GPS_MAX_SPEED_MS * 3.6f);
+    if (!sameEpoch) {
+      if (gpsFixStreak < 250) gpsFixStreak++;
+      trusted = !GPS_FILTER || (gpsFixStreak >= GPS_SEND_MIN_EPOCHS && gps.speedKmh <= GPS_MAX_SPEED_MS * 3.6f);
+      gpsEpochTrusted = trusted;
+      if (sats >= GPS_SEND_MIN_SATS && hdop > 0 && hdop <= GPS_SEND_MAX_HDOP && gps.speedKmh <= GPS_MAX_SPEED_MS * 3.6f) {
+        if (gpsGoodStreak < 250) gpsGoodStreak++;      // gute Epochen in Folge (Gate fuer Beacon/SondeHub-Upload)
+      } else gpsGoodStreak = 0;
+    } else trusted = gpsEpochTrusted;
+    if (!trusted) {
+      gps.fix = true;                                  // Modul meldet Fix, Position wird aber (noch) nicht uebernommen
+      gps.lastFix = millis();
+    } else if (sameEpoch) {                           // genauere Verfeinerung derselben Epoche: direkt uebernehmen,
       gps.lat = rawLat;                               // NICHT nochmal durch gpsFilterFix (das hat die Epoche schon
       gps.lon = rawLon;                               // einmal bewertet)
       gps.alt = rawAlt;
@@ -2041,6 +2186,8 @@ static void parseNmea(char *s) {
     }
   } else {
     gps.fix = false;
+    gpsFixStreak = 0;
+    gpsGoodStreak = 0;                                 // Fix verloren: Gate fuer Beacon/Upload beginnt von vorn
     gps.hdop = -1;                                     // kein Fix -- HDOP bedeutungslos, Qualitaets-Gates sollen das sehen
   }
 }
@@ -2416,11 +2563,12 @@ static void aprsRemove(int i) {
   else if (aprsListSel > i) { aprsListSel--; }
 }
 
-// Stationen, die laenger als APRS_MAX_AGE_MS (15 Minuten) nicht mehr gehoert wurden, komplett aus der Liste
-// entfernen -- nicht erst beim naechsten Ueberschreiben bei vollem Puffer (aprsFindOrAdd()), sondern aktiv:
-// so verschwindet eine Station spaetestens 15 Minuten nach ihrer letzten Meldung sowohl aus der Stationsliste
+// Stationen, die laenger als APRS_MAX_AGE_MS (30 Minuten, seit v4.9x angehoben von 15, siehe oben) nicht mehr
+// gehoert wurden, komplett aus der Liste entfernen -- nicht erst beim naechsten Ueberschreiben bei vollem
+// Puffer (aprsFindOrAdd()), sondern aktiv: so verschwindet eine Station spaetestens 30 Minuten nach ihrer letzten Meldung sowohl aus der Stationsliste
 // (Geraet/Web, altTrackUpdate()/webAltStat()) als auch von der Karte (drawAprsStations()), da beide aus
-// demselben Array lesen. Rueckwaerts durchlaufen, damit das Nachruecken in aprsRemove() die Laufindizes der
+// demselben Array lesen (spaetestens, nicht genau 30 Minuten: aprsPrune() laeuft nur alle paar Sekunden, nicht
+// auf die Millisekunde). Rueckwaerts durchlaufen, damit das Nachruecken in aprsRemove() die Laufindizes der
 // noch zu pruefenden Stationen nicht verschiebt.
 static void aprsPrune() {
   uint32_t now = millis();
@@ -2724,13 +2872,15 @@ static void beepInit() {
 // hz waehlt die Tonhoehe -- so lassen sich mit derselben Klangerzeugung mehrere, am Klang unterscheidbare
 // Toene erzeugen (normaler Empfangs-/Sendeton BEEP_HZ, neue Station direkt/repeated siehe aprsStoreFromInfo()).
 static void beepPlayHz(int hz) {
-  if (!beepReady) return;
+  if (!beepReady || beepVol == 0) return;
+  const float volF = beepVol / 100.0f;
+  const float amp = 24000.0f * volF * volF;   // quadratisch: wahrgenommene Lautstaerke steigt grob gleichmaessig mit dem Regler
   static int16_t buf[2 * (BEEP_RATE * BEEP_MS / 1000)];
   const int n = BEEP_RATE * BEEP_MS / 1000;
   const int ramp = n / 8;
   for (int i = 0; i < n; i++) {
     float env = (i < ramp) ? (float)i / ramp : ((i > n - ramp) ? (float)(n - i) / ramp : 1.0f);
-    int16_t v = (int16_t)(env * 24000.0f * sinf(2.0f * (float)M_PI * hz * i / BEEP_RATE));
+    int16_t v = (int16_t)(env * amp * sinf(2.0f * (float)M_PI * hz * i / BEEP_RATE));
     buf[2 * i] = v; buf[2 * i + 1] = v;
   }
   size_t written;
@@ -2833,22 +2983,28 @@ static float batRefV = 0;
 // irgendwo in diesem Bereich steht (z. B. 3.50V), zeigte dadurch ueber eine Stunde lang unveraendert "3-4%"
 // an, obwohl die Spannung spuerbar weiter sank -- sah wie "haengengeblieben" aus. Jetzt bis 0% genauso fein
 // gestuft wie der Rest der Kurve.
-// Die unteren Stufen (frueher 2%@3.51/1%@3.45/0%@3.27) stammen jetzt aus einem echten Durchlauf bis zum
+// Die unteren Stufen (frueher 2%@3.51/1%@3.45/0%@3.27) stammen aus einem echten Durchlauf bis zum
 // tatsaechlichen Abschalten (16.10.2026, Minuten-Log): das Geraet lief ab 3.27 V (altes "0%") noch ueber
 // 49 Minuten lang voellig normal weiter (GPS-Fix, LoRa-TX, Display) und ist erst bei ca. 2,51 V wirklich
-// ausgegangen -- "0%" stand also fast eine Stunde lang auf dem Display, obwohl noch satt Laufzeit uebrig
-// war ("die Anzeige pendelt bei 3-4%, geht aber nicht aus"). Neue Stufen 2%/1%/0% jetzt anhand der in diesem
-// Lauf GEMESSENEN Restlaufzeit gesetzt (3.49 V -> noch ca. 283 min, 3.41 V -> ca. 141 min, 3.35 V -> ca.
-// 70 min, 2.90 V -> nur noch ca. 8 min bis zum echten Ende) statt einer generischen LiPo-Kurve: "0%" kommt
-// dadurch spuerbar spaeter und bedeutet jetzt wirklich "gleich ist Schluss" statt "noch bis zu einer Stunde Zeit".
-static int batPercent(float v) {       // typische LiPo-Entladekurve, unten per Messung kalibriert (siehe oben)
-  static const float tv[26] = {4.20f, 4.15f, 4.11f, 4.08f, 4.02f, 3.98f, 3.95f, 3.91f, 3.87f, 3.85f, 3.84f,
-                               3.82f, 3.80f, 3.79f, 3.77f, 3.75f, 3.73f, 3.71f, 3.69f, 3.65f, 3.61f, 3.57f,
-                               3.54f, 3.49f, 3.35f, 2.90f};
-  static const int tp[26] = {100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 8, 6, 4, 3, 2, 1, 0};
+// ausgegangen. Neue Stufen 2%/1%/0% damals anhand der in diesem Lauf GEMESSENEN Restlaufzeit gesetzt
+// (3.49 V -> noch ca. 283 min, 3.41 V -> ca. 141 min, 3.35 V -> ca. 70 min, 2.90 V -> nur noch ca. 8 min
+// bis zum echten Ende) -- diese vier unteren Ankerpunkte (3.49/3.41/3.35/2.90 V) sind echt gemessen und
+// bleiben unveraendert.
+// BUG (Okt. 2026, "Akkuberechnung passt garnicht mehr"/Log zeigte frisch geladenes Geraet nach nur
+// 10-15 Minuten Standby schon auf 13-20%): der Teil der Kurve OBERHALB von 3.49 V war nie gemessen,
+// sondern nur grob aus einer generischen LiPo-Entladekurve geschaetzt -- und viel zu steil: 3.73 V stand auf
+// 20%, obwohl laut der echten Messung schon bei 3.49 V (deutlich weniger) noch 283 Minuten (fast 5 h!)
+// Laufzeit uebrig waren. Der ganze Bereich zwischen 3.49 V und dem vollen Akku wurde dadurch auf nur
+// 2-100% zusammengequetscht, waehrend er in Wirklichkeit den allergroessten Teil der echten Kapazitaet
+// enthaelt (typische LiPo-Plateauspannung 3.7-3.9 V unter Last). Kurve oberhalb 3.49 V jetzt deutlich
+// weiter auseinandergezogen (3.73 V -> 40% statt 20%), die vier echt gemessenen unteren Punkte unveraendert.
+static int batPercent(float v) {       // oben geschaetzt/gestreckt (Plateau), unten per echter Entlademessung kalibriert (siehe oben)
+  static const float tv[23] = {4.20f, 4.10f, 4.00f, 3.95f, 3.90f, 3.87f, 3.85f, 3.83f, 3.81f, 3.79f, 3.77f,
+                               3.75f, 3.73f, 3.71f, 3.69f, 3.65f, 3.61f, 3.57f, 3.53f, 3.49f, 3.41f, 3.35f, 2.90f};
+  static const int tp[23] = {100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 6, 3, 1, 0};
   if (v >= tv[0]) return 100;
-  if (v <= tv[25]) return 0;
-  for (int i = 0; i < 25; i++)
+  if (v <= tv[22]) return 0;
+  for (int i = 0; i < 22; i++)
     if (v <= tv[i] && v > tv[i + 1])
       return (int)(tp[i + 1] + (tp[i] - tp[i + 1]) * (v - tv[i + 1]) / (tv[i] - tv[i + 1]) + 0.5f);
   return 0;
@@ -2908,8 +3064,13 @@ static void drawBattery(Adafruit_GFX *g, int x, int y) {
     g->drawLine(x + 13, y + 5, x + 9, y + 8, ST77XX_WHITE);
   }
   char t[8];
-  if (batPct < 0) snprintf(t, sizeof(t), "USB");
-  else snprintf(t, sizeof(t), "%d%%", batPct);
+  if ((millis() / 2000) % 2 == 1) {              // Feature (Wunsch Okt. 2026, "Akkukapazitaet im Wechsel (2 sek) mit der
+    snprintf(t, sizeof(t), "%.2f", batV);        // gemessenen Spannung anzeigen"): wechselt alle 2 s zwischen Prozent/USB
+  } else if (batPct < 0) {                       // (wie bisher) und der rohen gemessenen Spannung (batV, "x.xx" ohne
+    snprintf(t, sizeof(t), "USB");                // Einheit, siehe Wunsch) -- unabhaengig vom 3-s-Messtakt in batteryTick(),
+  } else {                                        // rein anzeigeseitig per millis()
+    snprintf(t, sizeof(t), "%d%%", batPct);
+  }
   g->setTextSize(1);
   g->setTextColor(ST77XX_WHITE);
   g->setCursor(x + 27, y + 1);
@@ -3755,7 +3916,14 @@ static void showCentered(double lat, double lon, int z) {
 // handleInput()). -1 = aus (normales GPS-Tempo gilt), sonst der Testwert in km/h. Bewusst nur im RAM, kein
 // Prefs-Eintrag und kein logLine()-Aufruf beim Umschalten -- taucht also nirgends im SD-Log auf.
 static float dbgSpeedOverride = -1.0f;
-static inline float effSpeedKmh() { return dbgSpeedOverride >= 0.0f ? dbgSpeedOverride : gps.speedKmh; }
+static uint32_t dbgSpeedUntilMs = 0;                 // Testtempo laeuft nach DBG_SPEED_TEST_MS von selbst ab (siehe unten)
+#define DBG_SPEED_TEST_MS 30000UL
+static inline float effSpeedKmh() {
+  // Die Testtaste N (Karte) hing frueher bis zum erneuten Druck fest: eine versehentlich beim Radfahren gedrueckte
+  // Taste N hielt Tempo 20 km/h/Fahrrad-Symbol dauerhaft fest (Log 24.10.: Beacons alle 30 s im Stand) -- darum Ablauf.
+  if (dbgSpeedOverride >= 0.0f && (int32_t)(millis() - dbgSpeedUntilMs) >= 0) dbgSpeedOverride = -1.0f;
+  return dbgSpeedOverride >= 0.0f ? dbgSpeedOverride : gps.speedKmh;
+}
 
 // Pfeil fuer Steigen/Sinken neben der Steig-/Sinkrate: nach oben (gruen) bei > 1 m/s, nach unten (orange) bei
 // < -1 m/s, sonst ein waagerechter Strich ("eben"). x = linker Rand, yc = vertikale Mitte der Pfeilflaeche.
@@ -4676,6 +4844,7 @@ static void loadSettings() {
                                                                // bool-Schluessels "tblock" -- Umstieg genuegt (0 = aus)
   ownTrailOn = prefs.getBool("owntr", true);
   beepSec = (uint8_t)constrain((int)prefs.getUChar("beepsec", 0), 0, 20);
+  beepVol = (uint8_t)constrain((int)prefs.getUChar("beepvol", 100), 0, 100);
   brightPct = constrain((int)prefs.getUChar("brpct", 100), 10, 100);
   kbMode = prefs.getUChar("kbmode", 2) % 3;
   gpxOn = prefs.getBool("gpxon", true);
@@ -4731,6 +4900,7 @@ static void saveSettings() {
   prefs.putUChar("tblockm", tbLockMode);
   prefs.putBool("owntr", ownTrailOn);
   prefs.putUChar("beepsec", beepSec);
+  prefs.putUChar("beepvol", beepVol);
   prefs.putUChar("brpct", brightPct);
   prefs.putUChar("kbmode", kbMode);
   prefs.putBool("gpxon", gpxOn);
@@ -4758,7 +4928,11 @@ static void saveSettings() {
 // ========================================================================================================
 #define CFG_INI_PATH "/config.ini"
 
-enum CfgType : uint8_t { CFG_U32, CFG_I32, CFG_FLOAT, CFG_DOUBLE, CFG_U16 };
+// CFG_SEC: wie CFG_MS, aber intern in ganzen SEKUNDEN gespeichert (uint32_t; Bereichsgrenzen lo/hi in Sekunden).
+// CFG_MS: Zeitwert, intern wie bisher in Millisekunden (uint32_t), in config.ini/Editor aber in SEKUNDEN (Wunsch Okt. 2026):
+// "3.456" oder "3,456" (= 3456 ms), auch mit Einheit ("3.456s", "3456ms") oder als hh:mm:ss bzw. mm:ss (auch mit
+// Nachkommastellen bei den Sekunden). Die Bereichsgrenzen lo/hi in CFG_REGISTRY stehen weiter in ms.
+enum CfgType : uint8_t { CFG_U32, CFG_I32, CFG_FLOAT, CFG_DOUBLE, CFG_U16, CFG_MS, CFG_SEC };
 
 struct CfgEntry {
   const char *name;
@@ -4783,21 +4957,24 @@ static void cfgApplyRaw(const CfgEntry &e, double v);
 
 // Reihenfolge wie in settings.h, damit die erzeugte/heruntergeladene Datei denselben Abschnitten folgt.
 static const CfgEntry CFG_REGISTRY[] = {
-  { "WIFI_LOST_MS", CFG_U32, &WIFI_LOST_MS, 0, 600000 },
-  { "WIFI_IDLE_OFF_MS", CFG_U32, &WIFI_IDLE_OFF_MS, 0, 3600000 },
-  { "WIFI_BOOT_HOME_TIMEOUT_MS", CFG_U32, &WIFI_BOOT_HOME_TIMEOUT_MS, 0, 600000 },
-  { "WIFI_BOOT_AP_MS", CFG_U32, &WIFI_BOOT_AP_MS, 0, 3600000 },
-  { "NTP_TIMEOUT_MS", CFG_U32, &NTP_TIMEOUT_MS, 500, 60000 },
-  { "BOOT_SPLASH_MS", CFG_U32, &BOOT_SPLASH_MS, 0, 20000 },
-  { "TOAST_MS_DEFAULT", CFG_U32, &TOAST_MS_DEFAULT, 200, 20000 },
-  { "TOAST_MS_LONG", CFG_U32, &TOAST_MS_LONG, 200, 60000 },
-  { "MENU_NOTE_MS", CFG_U32, &MENU_NOTE_MS, 200, 20000 },
+  { "WIFI_LOST_S", CFG_MS, &WIFI_LOST_MS, 0, 600000 },
+  { "RS41_ONESYNC", CFG_U32, &RS41_ONESYNC, 0, 1 },
+  { "GPS_FILTER", CFG_U32, &GPS_FILTER, 0, 1 },
+  { "SONDE_TYPES", CFG_U32, &SONDE_TYPES, 0, 2 },
+  { "WIFI_IDLE_OFF_S", CFG_MS, &WIFI_IDLE_OFF_MS, 0, 3600000 },
+  { "WIFI_BOOT_HOME_TIMEOUT_S", CFG_MS, &WIFI_BOOT_HOME_TIMEOUT_MS, 0, 600000 },
+  { "WIFI_BOOT_AP_S", CFG_MS, &WIFI_BOOT_AP_MS, 0, 3600000 },
+  { "NTP_TIMEOUT_S", CFG_MS, &NTP_TIMEOUT_MS, 500, 60000 },
+  { "BOOT_SPLASH_S", CFG_MS, &BOOT_SPLASH_MS, 0, 20000 },
+  { "TOAST_S_DEFAULT", CFG_MS, &TOAST_MS_DEFAULT, 200, 20000 },
+  { "TOAST_S_LONG", CFG_MS, &TOAST_MS_LONG, 200, 60000 },
+  { "MENU_NOTE_S", CFG_MS, &MENU_NOTE_MS, 200, 20000 },
   { "COL_SONDE_OK", CFG_U16, &COL_SONDE_OK, 0, 16777215 },
   { "COL_SONDE_LATE", CFG_U16, &COL_SONDE_LATE, 0, 16777215 },
   { "COL_SONDE_LOST", CFG_U16, &COL_SONDE_LOST, 0, 16777215 },
   { "COL_SONDE_RING", CFG_U16, &COL_SONDE_RING, 0, 16777215 },
   { "COL_SONDE_RING_SIG", CFG_U16, &COL_SONDE_RING_SIG, 0, 16777215 },
-  { "SONDE_SIGNAL_FLASH_MS", CFG_U32, &SONDE_SIGNAL_FLASH_MS, 0, 10000 },
+  { "SONDE_SIGNAL_FLASH_S", CFG_MS, &SONDE_SIGNAL_FLASH_MS, 0, 10000 },
   { "COL_ICH_FILL", CFG_U16, &COL_ICH_FILL, 0, 16777215 },
   { "COL_ICH_RING", CFG_U16, &COL_ICH_RING, 0, 16777215 },
   { "COL_LINE", CFG_U16, &COL_LINE, 0, 16777215 },
@@ -4819,59 +4996,60 @@ static const CfgEntry CFG_REGISTRY[] = {
   { "BAT_USB_V", CFG_FLOAT, &BAT_USB_V, 3.0, 5.0 },
   { "KB_LEVEL", CFG_I32, &KB_LEVEL, 0, 255 },
   { "KB_LEVEL_DIM", CFG_I32, &KB_LEVEL_DIM, 0, 255 },
-  { "KB_ON_MS", CFG_U32, &KB_ON_MS, 0, 60000 },
-  { "KB_BRIGHT_MS", CFG_U32, &KB_BRIGHT_MS, 0, 60000 },
+  { "KB_ON_S", CFG_MS, &KB_ON_MS, 0, 60000 },
+  { "KB_BRIGHT_S", CFG_MS, &KB_BRIGHT_MS, 0, 60000 },
   { "KB_DARK_ELEV", CFG_DOUBLE, &KB_DARK_ELEV, -90.0, 90.0 },
-  { "FILTER_FOREIGN_BLOCK_MS", CFG_U32, &FILTER_FOREIGN_BLOCK_MS, 0, 600000 },
-  { "FILTER_FOREIGN_BLOCK_UNK_MS", CFG_U32, &FILTER_FOREIGN_BLOCK_UNK_MS, 0, 600000 },
+  { "FILTER_FOREIGN_BLOCK_S", CFG_MS, &FILTER_FOREIGN_BLOCK_MS, 0, 600000 },
+  { "FILTER_FOREIGN_BLOCK_UNK_S", CFG_MS, &FILTER_FOREIGN_BLOCK_UNK_MS, 0, 600000 },
   { "FILTER_UNKNOWN_RETRY_N", CFG_I32, &FILTER_UNKNOWN_RETRY_N, 1, 100 },
   { "GPS_MAX_SPEED_MS", CFG_FLOAT, &GPS_MAX_SPEED_MS, 1.0, 300.0 },
   { "GPS_JUMP_MARGIN_M", CFG_FLOAT, &GPS_JUMP_MARGIN_M, 0.0, 1000.0 },
-  { "GPS_GLITCH_TIMEOUT_MS", CFG_U32, &GPS_GLITCH_TIMEOUT_MS, 0, 600000 },
+  { "GPS_GLITCH_TIMEOUT_S", CFG_MS, &GPS_GLITCH_TIMEOUT_MS, 0, 600000 },
   { "GPS_FILTER_MAX_HDOP", CFG_FLOAT, &GPS_FILTER_MAX_HDOP, 0.1, 20.0 },
   { "GPS_FILTER_MIN_SATS", CFG_I32, &GPS_FILTER_MIN_SATS, 0, 32 },
   { "GPS_ALT_JUMP_M", CFG_FLOAT, &GPS_ALT_JUMP_M, 0.0, 1000.0 },
-  { "GPS_ALT_GLITCH_TIMEOUT_MS", CFG_U32, &GPS_ALT_GLITCH_TIMEOUT_MS, 0, 600000 },
+  { "GPS_ALT_GLITCH_TIMEOUT_S", CFG_MS, &GPS_ALT_GLITCH_TIMEOUT_MS, 0, 600000 },
   { "GPS_SEND_MIN_SATS", CFG_I32, &GPS_SEND_MIN_SATS, 0, 32 },
   { "GPS_SEND_MAX_HDOP", CFG_FLOAT, &GPS_SEND_MAX_HDOP, 0.1, 20.0 },
-  { "SAT_TIMEOUT_MS", CFG_U32, &SAT_TIMEOUT_MS, 1000, 60000 },
+  { "GPS_SEND_MIN_EPOCHS", CFG_I32, &GPS_SEND_MIN_EPOCHS, 1, 60 },
+  { "SAT_TIMEOUT_S", CFG_MS, &SAT_TIMEOUT_MS, 1000, 60000 },
   { "PRED_MIN_SINK", CFG_DOUBLE, &PRED_MIN_SINK, 0.0, 20.0 },
   { "PRED_SMOOTH_IN_ALPHA", CFG_FLOAT, &PRED_SMOOTH_IN_ALPHA, 0.0, 1.0 },
   { "PRED_SMOOTH_OUT_ALPHA", CFG_FLOAT, &PRED_SMOOTH_OUT_ALPHA, 0.0, 1.0 },
   { "KEEP_RECENT_KM", CFG_FLOAT, &KEEP_RECENT_KM, 0.0, 100.0 },
-  { "TAWHIRI_RETRY_MS", CFG_U32, &TAWHIRI_RETRY_MS, 1000, 1800000 },
-  { "TAWHIRI_RETRY_FAST_MS", CFG_U32, &TAWHIRI_RETRY_FAST_MS, 1000, 1800000 },
+  { "TAWHIRI_RETRY_S", CFG_MS, &TAWHIRI_RETRY_MS, 1000, 1800000 },
+  { "TAWHIRI_RETRY_FAST_S", CFG_MS, &TAWHIRI_RETRY_FAST_MS, 1000, 1800000 },
   { "TAWHIRI_FAST_ALT_M", CFG_DOUBLE, &TAWHIRI_FAST_ALT_M, 0.0, 20000.0 },
   { "TAWHIRI_BURST_ALT_DEFAULT_M", CFG_DOUBLE, &TAWHIRI_BURST_ALT_DEFAULT_M, 1000.0, 45000.0 },
   { "TAWHIRI_FALLBACK_VZ0", CFG_DOUBLE, &TAWHIRI_FALLBACK_VZ0, 0.0, 50.0 },
-  { "TAWHIRI_MAX_SONDE_AGE_MS", CFG_U32, &TAWHIRI_MAX_SONDE_AGE_MS, 0, 3600000 },
-  { "DRAFT_IDLE_MS", CFG_U32, &DRAFT_IDLE_MS, 200, 30000 },
-  { "GPX_RESUME_GRACE_S", CFG_U32, &GPX_RESUME_GRACE_S, 0, 3600 },
-  { "GPX_RESUME_ASK_S", CFG_U32, &GPX_RESUME_ASK_S, 0, 172800 },
-  { "GPX_RESUME_ASK_MS", CFG_U32, &GPX_RESUME_ASK_MS, 1000, 120000 },
-  { "GPX_FLUSH_MS", CFG_U32, &GPX_FLUSH_MS, 1000, 300000 },
-  { "APRS_MAX_AGE_MS", CFG_U32, &APRS_MAX_AGE_MS, 0, 7200000 },
+  { "TAWHIRI_MAX_SONDE_AGE_S", CFG_MS, &TAWHIRI_MAX_SONDE_AGE_MS, 0, 3600000 },
+  { "DRAFT_IDLE_S", CFG_MS, &DRAFT_IDLE_MS, 200, 30000 },
+  { "GPX_RESUME_GRACE_S", CFG_SEC, &GPX_RESUME_GRACE_S, 0, 3600 },
+  { "GPX_RESUME_ASK_S", CFG_SEC, &GPX_RESUME_ASK_S, 0, 172800 },
+  { "GPX_RESUME_ASK_TIMEOUT_S", CFG_MS, &GPX_RESUME_ASK_MS, 1000, 120000 },
+  { "GPX_FLUSH_S", CFG_MS, &GPX_FLUSH_MS, 1000, 300000 },
+  { "APRS_MAX_AGE_S", CFG_MS, &APRS_MAX_AGE_MS, 0, 259200000 },
   { "OWN_SPEED_BIG_KMH", CFG_FLOAT, &OWN_SPEED_BIG_KMH, 0.0, 200.0 },
-  { "APRS_BEACON_SLOW_MS", CFG_U32, &APRS_BEACON_SLOW_MS, 1000, 3600000 },
-  { "APRS_BEACON_MED_MS", CFG_U32, &APRS_BEACON_MED_MS, 1000, 3600000 },
-  { "APRS_BEACON_FAST_MS", CFG_U32, &APRS_BEACON_FAST_MS, 1000, 3600000 },
+  { "APRS_BEACON_SLOW_S", CFG_MS, &APRS_BEACON_SLOW_MS, 1000, 3600000 },
+  { "APRS_BEACON_MED_S", CFG_MS, &APRS_BEACON_MED_MS, 1000, 3600000 },
+  { "APRS_BEACON_FAST_S", CFG_MS, &APRS_BEACON_FAST_MS, 1000, 3600000 },
   { "APRS_BEACON_DIST_WALK_M", CFG_DOUBLE, &APRS_BEACON_DIST_WALK_M, 0.0, 10000.0 },
   { "APRS_BEACON_DIST_FAST_M", CFG_DOUBLE, &APRS_BEACON_DIST_FAST_M, 0.0, 10000.0 },
-  { "APRS_BEACON_RETRY_MS", CFG_U32, &APRS_BEACON_RETRY_MS, 1000, 60000 },
-  { "APRS_SYMBOL_HYST_MS", CFG_U32, &APRS_SYMBOL_HYST_MS, 0, 600000 },
-  { "LORA_PAUSE_MS", CFG_U32, &LORA_PAUSE_MS, 1000, 600000 },
+  { "APRS_BEACON_RETRY_S", CFG_MS, &APRS_BEACON_RETRY_MS, 1000, 60000 },
+  { "APRS_SYMBOL_HYST_S", CFG_MS, &APRS_SYMBOL_HYST_MS, 0, 600000 },
+  { "LORA_PAUSE_S", CFG_MS, &LORA_PAUSE_MS, 1000, 600000 },
   { "LORA_PAUSE_WARN_S", CFG_I32, &LORA_PAUSE_WARN_S, 0, 60 },
   { "LORA_PAUSE_WARN_HZ", CFG_I32, &LORA_PAUSE_WARN_HZ, 100, 8000 },
-  { "LORA_TXRESUME_ASK_MS", CFG_U32, &LORA_TXRESUME_ASK_MS, 1000, 120000 },
+  { "LORA_TXRESUME_ASK_S", CFG_MS, &LORA_TXRESUME_ASK_MS, 1000, 120000 },
   { "BEEP_HZ", CFG_I32, &BEEP_HZ, 100, 8000 },
   { "BEEP_HZ_NEU_DIREKT", CFG_I32, &BEEP_HZ_NEU_DIREKT, 100, 8000 },
   { "BEEP_HZ_NEU_REPEATED", CFG_I32, &BEEP_HZ_NEU_REPEATED, 100, 8000 },
-  { "RECOVERY_RETRY_MS", CFG_U32, &RECOVERY_RETRY_MS, 1000, 600000 },
-  { "RECOVERY_DRAIN_GAP_MS", CFG_U32, &RECOVERY_DRAIN_GAP_MS, 0, 60000 },
-  { "SONDEHUB_LISTENER_CHECK_MS", CFG_U32, &SONDEHUB_LISTENER_CHECK_MS, 1000, 600000 },
-  { "SONDEHUB_LISTENER_STATIC_RETRY_MS", CFG_U32, &SONDEHUB_LISTENER_STATIC_RETRY_MS, 1000, 3600000 },
+  { "RECOVERY_RETRY_S", CFG_MS, &RECOVERY_RETRY_MS, 1000, 600000 },
+  { "RECOVERY_DRAIN_GAP_S", CFG_MS, &RECOVERY_DRAIN_GAP_MS, 0, 60000 },
+  { "SONDEHUB_LISTENER_CHECK_S", CFG_MS, &SONDEHUB_LISTENER_CHECK_MS, 1000, 600000 },
+  { "SONDEHUB_LISTENER_STATIC_RETRY_S", CFG_MS, &SONDEHUB_LISTENER_STATIC_RETRY_MS, 1000, 3600000 },
   { "SONDEHUB_MOVE_THRESHOLD_M", CFG_DOUBLE, &SONDEHUB_MOVE_THRESHOLD_M, 0.0, 1000.0 },
-  { "TBLOCK_DOUBLE_TAP_MS", CFG_U32, &TBLOCK_DOUBLE_TAP_MS, 200, 5000 },
+  { "TBLOCK_DOUBLE_TAP_S", CFG_MS, &TBLOCK_DOUBLE_TAP_MS, 200, 5000 },
 };
 #define CFG_REGISTRY_N (sizeof(CFG_REGISTRY) / sizeof(CFG_REGISTRY[0]))
 
@@ -4887,7 +5065,7 @@ static void cfgCaptureDefaults() {
   for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
     const CfgEntry &e = CFG_REGISTRY[i];
     switch (e.type) {
-      case CFG_U32:    CFG_DEFAULTS[i] = *(uint32_t *)e.ptr; break;
+      case CFG_U32: case CFG_MS: case CFG_SEC: CFG_DEFAULTS[i] = *(uint32_t *)e.ptr; break;
       case CFG_I32:    CFG_DEFAULTS[i] = *(int *)e.ptr; break;
       case CFG_FLOAT:  CFG_DEFAULTS[i] = *(float *)e.ptr; break;
       case CFG_DOUBLE: CFG_DEFAULTS[i] = *(double *)e.ptr; break;
@@ -4901,7 +5079,7 @@ static void cfgResetToDefaults() {
   for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
     const CfgEntry &e = CFG_REGISTRY[i];
     switch (e.type) {
-      case CFG_U32:    *(uint32_t *)e.ptr  = (uint32_t)CFG_DEFAULTS[i]; break;
+      case CFG_U32: case CFG_MS: case CFG_SEC: *(uint32_t *)e.ptr  = (uint32_t)CFG_DEFAULTS[i]; break;
       case CFG_I32:    *(int *)e.ptr       = (int)CFG_DEFAULTS[i]; break;
       case CFG_FLOAT:  *(float *)e.ptr     = (float)CFG_DEFAULTS[i]; break;
       case CFG_DOUBLE: *(double *)e.ptr    = CFG_DEFAULTS[i]; break;
@@ -4921,10 +5099,112 @@ static uint32_t rgb565To24(uint16_t v) {
 // Setzt genau einen Eintrag (per Name, Gross-/Kleinschreibung egal) auf den geparsten Wert; true = Name
 // gefunden (Wert angewendet -- auch wenn der Text evtl. nicht als Zahl lesbar war, strtod/strtoul liefern
 // dann einfach 0, das faellt beim Pruefen der gespeicherten Datei auf).
+// Zeitangabe -> Millisekunden. Erlaubt (Wunsch Okt. 2026):
+//  - ohne Doppelpunkt: Sekunden, ganzzahlig oder mit Nachkommastellen ("90", "3.456", "3,456", ".1" = 100 ms, ".01" = 10 ms),
+//    optional mit Einheit "s" oder "ms" ("3.456s", "3456ms")
+//  - mit Doppelpunkt: [hh]:[mm[:ss[.ttt]]] -- Stunden stehen VOR dem ersten Doppelpunkt ("1:30" = 1 h 30 min, "2:" = 2 h),
+//    beginnt der Text mit einem Doppelpunkt, sind es Minuten ":30" = 30 min, ":1:30.25" = 1 min 30,25 s ("::15" = 15 s).
+//    Folgestellen sind immer optional; die Sekunden duerfen Nachkommastellen haben ("0:00:00.5" = 500 ms).
+// false = nicht lesbar.
+static bool cfgParseTimeMs(const char *s, double &ms) {
+  while (*s == ' ' || *s == '\t') s++;
+  char buf[48];
+  size_t n = 0;
+  for (; *s && n < sizeof(buf) - 1; s++) buf[n++] = (*s == ',') ? '.' : *s;
+  buf[n] = 0;
+  while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '\r' || buf[n - 1] == '\t')) buf[--n] = 0;
+  if (n == 0) return false;
+  double total = 0;
+  if (!strchr(buf, ':')) {                                 // nur Sekunden (ggf. mit Einheit)
+    double mult = 1000.0;
+    if (n >= 2 && (buf[n - 2] == 'm' || buf[n - 2] == 'M') && (buf[n - 1] == 's' || buf[n - 1] == 'S')) { mult = 1.0; buf[n - 2] = 0; }
+    else if (buf[n - 1] == 's' || buf[n - 1] == 'S') buf[n - 1] = 0;
+    char *e;
+    total = strtod(buf, &e);
+    if (e == buf || *e != 0 || total < 0) return false;
+    ms = floor(total * mult + 0.5);
+    return ms <= 4294967295.0;
+  }
+  char *fld[5];
+  int k = 0;
+  fld[k++] = buf;
+  for (char *p = buf; *p; p++) if (*p == ':') { if (k >= 4) return false; *p = 0; fld[k++] = p + 1; }
+  bool minutesMode = (fld[0][0] == 0);                      // fuehrender Doppelpunkt: erste Zahl = Minuten
+  int first = minutesMode ? 1 : 0, cnt = k - first;
+  if (k == 4 && !minutesMode) {                             // frueheres Ausgabeformat hh:mm:ss:ttt (v6.6.x): ttt = Millisekunden
+    for (const char *q = fld[3]; *q; q++) if (*q < '0' || *q > '9') return false;
+    if (fld[3][0]) total = strtod((String("0.") + fld[3]).c_str(), nullptr);
+    cnt = 3;
+  }
+  if (cnt < 1 || cnt > (minutesMode ? 2 : 3)) return false;
+  bool any = false;
+  for (int i = 0; i < cnt; i++) {
+    const char *f = fld[first + i];
+    if (!*f) continue;
+    bool isSec = minutesMode ? (i == 1) : (i == 2);
+    for (const char *q = f; *q; q++) if (!((*q >= '0' && *q <= '9') || (isSec && *q == '.'))) return false;
+    double m = minutesMode ? (i == 0 ? 60.0 : 1.0) : (i == 0 ? 3600.0 : (i == 1 ? 60.0 : 1.0));
+    total += strtod(f, nullptr) * m;
+    any = true;
+  }
+  if (!any) return false;
+  ms = floor(total * 1000.0 + 0.5);
+  return ms <= 4294967295.0;
+}
+
+// Millisekunden -> Text: bis einschliesslich 60 s als Sekunden ("3.456", "30"), darueber als hh:mm:ss.ttt.
+static void cfgFormatTimeMs(uint32_t ms, char *buf, size_t n) {
+  if (ms > 60000UL) {
+    snprintf(buf, n, "%02lu:%02lu:%02lu.%03lu", (unsigned long)(ms / 3600000UL), (unsigned long)((ms / 60000UL) % 60),
+             (unsigned long)((ms / 1000UL) % 60), (unsigned long)(ms % 1000));
+    return;
+  }
+  if (ms % 1000 == 0) snprintf(buf, n, "%lu", (unsigned long)(ms / 1000));
+  else {
+    int k = snprintf(buf, n, "%lu.%03lu", (unsigned long)(ms / 1000), (unsigned long)(ms % 1000));
+    while (k > 0 && buf[k - 1] == '0') buf[--k] = 0;
+  }
+}
+
+// Kommazahl ohne wissenschaftliche Schreibweise und ohne ueberfluessige Nullen ("%.4g" machte aus 30000 "3e+04").
+static void cfgFormatNum(double v, char *buf, size_t n) {
+  int k = snprintf(buf, n, "%.6f", v);
+  if (k <= 0 || (size_t)k >= n) return;
+  while (k > 0 && buf[k - 1] == '0') buf[--k] = 0;
+  if (k > 0 && buf[k - 1] == '.') buf[--k] = 0;
+}
+
+// Fruehere Schluessel (vor Version 6.4.0 standen Zeiten in config.ini in Millisekunden, Namen auf _MS): beim Einlesen
+// weiter akzeptiert, Wert dann als ganze Millisekunden. Neuer Name -> alter Name.
+static void cfgLegacyName(const char *nm, char *out, size_t n) {
+  if (strcmp(nm, "GPX_RESUME_ASK_TIMEOUT_S") == 0) { snprintf(out, n, "GPX_RESUME_ASK_MS"); return; }
+  size_t L = strlen(nm), o = 0;
+  for (size_t i = 0; i < L && o + 2 < n; i++) {
+    out[o++] = nm[i];
+    if (nm[i] == '_' && nm[i + 1] == 'S' && (nm[i + 2] == '_' || nm[i + 2] == 0)) { out[o++] = 'M'; }
+  }
+  out[o] = 0;
+}
+
 static bool applyConfigValue(const String &name, const String &val) {
+  for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {            // Zeitwerte: alter Schluessel (_MS) = ganze Millisekunden
+    if (CFG_REGISTRY[i].type != CFG_MS) continue;
+    char lg[48];
+    cfgLegacyName(CFG_REGISTRY[i].name, lg, sizeof(lg));
+    if (name.equalsIgnoreCase(lg)) { *(uint32_t *)CFG_REGISTRY[i].ptr = strtoul(val.c_str(), nullptr, 0); return true; }
+  }
   for (unsigned i = 0; i < CFG_REGISTRY_N; i++) {
     if (name.equalsIgnoreCase(CFG_REGISTRY[i].name)) {
       const char *v = val.c_str();
+      if (CFG_REGISTRY[i].type == CFG_MS || CFG_REGISTRY[i].type == CFG_SEC) {
+        double ms;
+        if (!cfgParseTimeMs(v, ms)) return false;
+        double val = (CFG_REGISTRY[i].type == CFG_SEC) ? floor(ms / 1000.0 + 0.5) : ms;
+        if (val < CFG_REGISTRY[i].lo) val = CFG_REGISTRY[i].lo;      // Zeiten ausserhalb des erlaubten Bereichs auf die Grenze setzen
+        if (val > CFG_REGISTRY[i].hi) val = CFG_REGISTRY[i].hi;      // (z. B. 3 h bei APRS_BEACON_SLOW_S, erlaubt bis 1 h)
+        *(uint32_t *)CFG_REGISTRY[i].ptr = (uint32_t)val;
+        return true;
+      }
       switch (CFG_REGISTRY[i].type) {
         case CFG_U32:    *(uint32_t *)CFG_REGISTRY[i].ptr = strtoul(v, nullptr, 0); break;
         case CFG_I32:    *(int *)CFG_REGISTRY[i].ptr      = (int)strtol(v, nullptr, 0); break;
@@ -4970,9 +5250,11 @@ static int applyConfigText(const String &text, int *unknownCount = nullptr) {
 static void cfgFormatValue(const CfgEntry &e, char *buf, size_t n) {
   switch (e.type) {
     case CFG_U32:    snprintf(buf, n, "%lu", (unsigned long)*(uint32_t *)e.ptr); break;
+    case CFG_MS:  cfgFormatTimeMs(*(uint32_t *)e.ptr, buf, n); break;
+    case CFG_SEC: { uint64_t ms = (uint64_t)*(uint32_t *)e.ptr * 1000ULL; cfgFormatTimeMs(ms > 4294967295ULL ? 4294967295UL : (uint32_t)ms, buf, n); break; }
     case CFG_I32:    snprintf(buf, n, "%d", *(int *)e.ptr); break;
-    case CFG_FLOAT:  snprintf(buf, n, "%.4g", (double)*(float *)e.ptr); break;
-    case CFG_DOUBLE: snprintf(buf, n, "%.4g", *(double *)e.ptr); break;
+    case CFG_FLOAT:  cfgFormatNum((double)*(float *)e.ptr, buf, n); break;
+    case CFG_DOUBLE: cfgFormatNum(*(double *)e.ptr, buf, n); break;
     case CFG_U16:    snprintf(buf, n, "0x%06lX", (unsigned long)rgb565To24(*(uint16_t *)e.ptr)); break;   // Anzeige: RGB888
   }
 }
@@ -4982,6 +5264,7 @@ static String buildConfigIniText() {
   s.reserve(4096);
   s += "; T-Deck RS41 -- Laufzeit-Einstellungen (Feature v4.95)\n";
   s += "; Format: NAME=WERT, eine Zeile je Wert. Zeilen mit ; oder # werden ignoriert.\n";
+  s += "; Zeiten (Namen auf _S) in SEKUNDEN: 3.456 oder 3,456 (= 3456 ms), auch mit Einheit (3.456s, 3456ms) oder als [hh]:[mm[:ss[.ttt]]] (:30 = 30 min, 1:30 = 1 h 30 min). Werte ueber 60 s stehen als hh:mm:ss.ttt.\n";
   s += "; Farben (COL_...) als normales RGB888 (0xRRGGBB, wie in jedem Colorpicker) oder dezimal.\n";
   s += "; Bedeutung der einzelnen Namen siehe settings.h (Kommentare dort, Markierung \"-- CFG:\").\n";
   s += "; Diese Datei spiegelt den AKTUELLEN Stand (inkl. hier schon mal gespeicherter Aenderungen) --\n";
@@ -5096,9 +5379,9 @@ static void cycleView() {
 // MI_NET ein reiner Aktions-Punkt (kein Umschalter), siehe menuStep()/menuWebSkip() weiter unten. Taste 'h' ist
 // die einzige im Einstellungsmenue noch freie Taste (alle anderen 25 Buchstaben sind schon vergeben, 'c' direkt
 // hier im Menue zudem fest fuer den Screenshot reserviert, siehe runMenu()) -- daher ohne Mnemonic-Bezug zum Namen.
-enum { MI_ID, MI_SEARCH, MI_FREQ, MI_BW, MI_SF, MI_CR, MI_TXPWR, MI_FIX, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_CFGMENU, MI_SHUTDOWN, MI_COUNT };
-static const char menuKey[MI_COUNT] = {'i', 's', 'f', 'b', 'd', 'n', 'u', 'k', 'v', 'l', 'z', 'g', 'r', 'o', 'x', 'm', 'y', 't', 'j', 'p', 'w', 'e', 'a', 'h', 'q'};
-static const char *const menuName[MI_COUNT] = {"Funkmodus", "Suche", "Frequenz", "Bandbreite", "Spreizfaktor", "Codierrate", "Sendeleistung", "Fehlerkorr.", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Kartenart", "Helligkeit", "Tastatur", "GPX", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Konfiguration (.ini) editieren", "Herunterfahren"};
+enum { MI_ID, MI_SEARCH, MI_TYPES, MI_RS41MODE, MI_FREQ, MI_BW, MI_SF, MI_CR, MI_TXPWR, MI_FIX, MI_PRED, MI_LAND, MI_ZOOM, MI_PAN, MI_TBLOCK, MI_OWN, MI_BEEP, MI_BEEPVOL, MI_MAP, MI_BRIGHT, MI_KB, MI_GPX, MI_GPSFILT, MI_SDLOG, MI_WIFI, MI_NET, MI_SHUB, MI_CFGMENU, MI_SHUTDOWN, MI_COUNT };
+static const char menuKey[MI_COUNT] = {'i', 's', '#', '*', 'f', 'b', 'd', 'n', 'u', 'k', 'v', 'l', 'z', 'g', 'r', 'o', 'x', '+', 'm', 'y', 't', 'j', '/', 'p', 'w', 'e', 'a', 'h', 'q'};
+static const char *const menuName[MI_COUNT] = {"Funkmodus", "Suche", "Sondentyp", "RS41-Empfang", "Frequenz", "Bandbreite", "Spreizfaktor", "Codierrate", "Sendeleistung", "Fehlerkorr.", "Vorhersage", "Landehoehe", "Zoom", "Scroll-Empf.", "Trackball-Sperre", "Eigener Track", "Ton", "Lautstaerke", "Kartenart", "Helligkeit", "Tastatur", "GPX", "GPS-Filter", "SD-Log", "WLAN", "Netz", "SondeHub-Upload", "Konfiguration (.ini) editieren", "Herunterfahren"};
 
 // Anzeigename eines Menuepunkts -- wie menuName[], aber MI_SHUB heisst im LoRa-Modus "LoRa Upload" statt
 // "SondeHub-Upload" (siehe menuValue()/menuStep() MI_SHUB: derselbe Menuepunkt ist dort je nach radioMode
@@ -5117,7 +5400,7 @@ static const float bwList[7] = {9.7f, 11.7f, 14.6f, 19.5f, 23.4f, 29.3f, 39.0f};
 // (Funkmodus-Umschalter) ist immer sichtbar, sonst gaebe es aus dem jeweils anderen Modus keinen Weg zurueck.
 static bool menuItemApplies(int i) {
   switch (i) {
-    case MI_SEARCH: case MI_FIX: case MI_PRED: case MI_LAND:
+    case MI_SEARCH: case MI_TYPES: case MI_RS41MODE: case MI_FIX: case MI_PRED: case MI_LAND:
       return radioMode == 0;                      // nur Sondenempfang
     case MI_TXPWR: case MI_SF: case MI_CR:
       return radioMode == 1;                      // nur LoRa-APRS
@@ -5145,7 +5428,7 @@ static uint32_t menuNoteUntil = 0;
 static bool shutdownConfirm = false;               // "Herunterfahren": Sicherheitsabfrage
 static uint32_t shutdownConfirmMs = 0;
 
-static bool menuIsNumeric(int i) { return i == MI_FREQ || i == MI_LAND || i == MI_ZOOM || i == MI_PAN || i == MI_BEEP || i == MI_BRIGHT || i == MI_TXPWR; }
+static bool menuIsNumeric(int i) { return i == MI_FREQ || i == MI_LAND || i == MI_ZOOM || i == MI_PAN || i == MI_BEEP || i == MI_BEEPVOL || i == MI_BRIGHT || i == MI_TXPWR; }
 
 // Beginnt beim Einschalten ein frisches Log fuer diese Sitzung: ohne Platz-Rotation, einfach unter der
 // ersten noch freien Platzhalter-Nummer rs41_log_01.txt .. _<LOG_FALLBACK_MAX>.txt hochgezaehlt (nichts wird
@@ -5574,14 +5857,47 @@ static void webZipShots() { std::vector<FileInfo> v; listDir(SHOT_DIR, "shot_", 
 static void webZipGpx()   { std::vector<FileInfo> v; listDir(GPX_DIR, "", ".gpx", v);       std::vector<ZipEntry> e; zipEntriesFromDir(GPX_DIR, v, e);   webZipSend(e, "gpx.zip"); }
 static void webZipLogs()  { std::vector<FileInfo> v; listDir(LOG_DIR, "rs41_log_", ".txt", v); std::vector<ZipEntry> e; zipEntriesFromDir(LOG_DIR, v, e); webZipSend(e, "logs.zip"); }
 
+// Gewaehlte Dateinamen einsammeln. Neuer Weg (JavaScript-fetch der Dateiliste): Text-Body, ein Name je Zeile
+// (landet im WebServer als Argument "plain"). Alter Weg (Formular): ein "del"-Feld je Name. Beides wird akzeptiert.
+static void collectSelected(std::vector<String> &out) {
+  for (int i = 0; i < server.args(); i++)
+    if (server.argName(i) == "del") out.push_back(server.arg(i));
+  String body = server.arg("plain");
+  int st = 0;
+  while (st < (int)body.length()) {
+    int e = body.indexOf('\n', st);
+    if (e < 0) e = body.length();
+    String n = body.substring(st, e);
+    n.trim();
+    if (n.length()) out.push_back(n);
+    st = e + 1;
+  }
+}
+
+static std::vector<String> zipStaged;            // vorgemerkte Namen fuer /zz (ZIP der Auswahl), siehe webStage()
+
 // Baut aus den per Checkbox markierten Dateien (ein "del"-Feld je Name, wie bei webDeleteMulti) eine ZIP --
 // kann Dateien aus allen drei Ordnern gleichzeitig enthalten. Dateiname: aktuelles Datum_Uhrzeit.zip (steht
 // die Uhr noch nicht, Platzhalter mit der Laufzeit in ms).
 static void webZipSelected() {
   std::vector<ZipEntry> files;
-  for (int i = 0; i < server.args(); i++) {
-    if (server.argName(i) != "del") continue;
-    String n = server.arg(i);
+  {   // Diagnose (Meldung Okt. 2026, Mehrfach-Download/-Loeschen via Website): im Log nachvollziehbar machen,
+      // dass die Anfrage ueberhaupt hier ankommt und wie viele Felder darin stecken
+    char lm[96];
+    snprintf(lm, sizeof(lm), "WLAN: Anfrage POST /zm (ZIP Auswahl), %d Feld(er), von %s", server.args(),
+             server.client().remoteIP().toString().c_str());
+    logLine(lm);
+  }
+  std::vector<String> sel;
+  collectSelected(sel);
+  if (sel.empty()) sel = zipStaged;             // "/zz": Auswahl, die die Dateiliste vorher per /zs paketweise gemeldet hat
+  {
+    char lm[96];
+    snprintf(lm, sizeof(lm), "WLAN: ZIP-Auswahl: %d Name(n) (Body %d Byte(s), vorgemerkt %d)", (int)sel.size(),
+             (int)server.arg("plain").length(), (int)zipStaged.size());
+    logLine(lm);
+  }
+  for (const String &n : sel) {
     const char *dir = nullptr;
     if (safeName(n, "shot_", ".jpg")) dir = SHOT_DIR;
     else if (safeName(n, "", ".gpx")) dir = GPX_DIR;
@@ -5624,6 +5940,7 @@ static void webIndex() {
   uint64_t freeKB = totalKB > usedKB ? totalKB - usedKB : 0;
   char spc[64];
   snprintf(spc, sizeof(spc), "Frei: %llu MB von %llu MB", (unsigned long long)(freeKB / 1024ULL), (unsigned long long)(totalKB / 1024ULL));
+  server.sendHeader("Cache-Control", "no-store");   // Dateiliste samt Skript nie aus dem Browser-Cache (alte Skriptversion blieb sonst nach einem Update stehen)
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/html; charset=utf-8", "");
   server.sendContent("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
@@ -5644,9 +5961,20 @@ static void webIndex() {
                      "<script>function selAll(el,cls){var cs=document.getElementsByClassName(cls);"
                      "for(var i=0;i<cs.length;i++)cs[i].checked=el.checked;}"
                      "function countSel(){return document.querySelectorAll('input[name=del]:checked').length;}"
-                     "function confirmZip(){if(countSel()===0){alert('Keine Datei ausgewählt.');return false;}return true;}"
-                     "function confirmDel(){var n=countSel();if(n===0){alert('Keine Datei ausgewählt.');return false;}"
-                     "return confirm(n+' Datei(en) löschen?');}</script>"
+                     "function names(){return Array.prototype.map.call(document.querySelectorAll('input[name=del]:checked'),function(e){return e.value;});}"
+                     // Loeschen/ZIP laufen im Hintergrund, die Namen gehen in kleinen GET-Paketen (je 12 Namen im Query-
+                     // String) -- kein grosser POST-Body (der kam beim T-Deck-Webserver nicht verlaesslich an, Meldung
+                     // Okt. 2026: "keine Datei ausgewaehlt" obwohl alles angehakt war)
+                     "function qs(a){return a.map(function(x){return 'n='+encodeURIComponent(x);}).join('&');}"
+                     "async function doDel(){var a=names();if(!a.length){alert('Keine Datei ausgewählt.');return;}"
+                     "if(!confirm(a.length+' Datei(en) löschen?'))return;var tot=0;"
+                     "try{for(var i=0;i<a.length;i+=12){var r=await fetch('/dg?'+(i==0?'c=1&':'')+qs(a.slice(i,i+12)));"
+                     "var t=(await r.text()).split(' ');tot+=parseInt(t[1])||0;}"
+                     "await fetch('/dg?fin=1');alert(tot+' von '+a.length+' Datei(en) gelöscht.');location.reload();}"
+                     "catch(e){alert('Fehler: '+e);}}"
+                     "async function doZip(){var a=names();if(!a.length){alert('Keine Datei ausgewählt.');return;}"
+                     "try{for(var i=0;i<a.length;i+=12){await fetch('/zs?'+(i==0?'c=1&':'')+qs(a.slice(i,i+12)));}"
+                     "location.href='/zz';}catch(e){alert('Fehler: '+e);}}</script>"
                      "</head><body>");
   server.sendContent(String("<p>SD-Karte -- ") + spc + "</p>");
   server.sendContent("<p><a href=\"/menu\">Men&uuml;-Fernsteuerung &amp; Live-Bild</a> -- "
@@ -5662,8 +5990,8 @@ static void webIndex() {
                      "<label><input type=checkbox onclick=\"selAll(this,'c_logs')\"> Alle ausw&auml;hlen</label><table>");
   server.sendContent(fileRows(logs, "/l", true, "c_logs"));
   server.sendContent("</table>"
-                     "<button type=submit formaction=\"/zm\" onclick=\"return confirmZip()\">Ausgew&auml;hlte herunterladen (ZIP)</button> "
-                     "<button type=submit formaction=\"/dm\" onclick=\"return confirmDel()\">Ausgew&auml;hlte l&ouml;schen</button>"
+                     "<button type=button onclick=\"doZip()\">Ausgew&auml;hlte herunterladen (ZIP)</button> "
+                     "<button type=button onclick=\"doDel()\">Ausgew&auml;hlte l&ouml;schen</button>"
                      "</form>");
   server.sendContent(String("<p style=\"color:#666;font-size:12px;margin-top:20px\">T-Deck RS41 v") + FW_VERSION + "</p></body></html>");
   server.sendContent("");
@@ -5831,34 +6159,91 @@ static void sdRemountAfterDelete() {
   sdReady = SD.begin(PIN_SD_CS, SPI, 4000000, "/sd", SD_MAX_OPEN_FILES);
 }
 
+// Antwort nach einer Loeschung (Einzel- wie Mehrfachloeschung): normale 200-Seite mit dem Ergebnis, die nach
+// 2 s selbst zur Dateiliste zurueckspringt -- statt der frueheren 303-Weiterleitung auf "/" (Meldung Okt. 2026,
+// "Loeschen mehrerer Dateien oder Download via Website funktioniert nicht mehr, im Trace kommt ein HTTP 303
+// Error"): manche Clients/Browser-Konstellationen behandeln das 303 nach einem POST als Fehler bzw. folgen der
+// Weiterleitung nicht sauber. Eine 200-Antwort mit Meta-Refresh und Link braucht keine Weiterleitung und
+// zeigt dazu gleich, wie viele Dateien tatsaechlich geloescht wurden.
+static void webDeletedPage(int deleted, int requested) {
+  char t[96];
+  if (requested <= 0) snprintf(t, sizeof(t), "Keine Datei ausgew&auml;hlt.");
+  else if (deleted == requested) snprintf(t, sizeof(t), "%d Datei(en) gel&ouml;scht.", deleted);
+  else snprintf(t, sizeof(t), "%d von %d Datei(en) gel&ouml;scht (Rest nicht gefunden/nicht erlaubt).", deleted, requested);
+  String h = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
+             "<meta http-equiv=refresh content=\"2;url=/\"><title>T-Deck RS41</title></head>"
+             "<body style=\"font-family:sans-serif;background:#000;color:#fff;margin:12px auto;max-width:760px\"><p>";
+  h += t;
+  h += "</p><p><a style=\"color:#6cf\" href=\"/\">&larr; zur&uuml;ck zur Dateiliste</a></p></body></html>";
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/html; charset=utf-8", h);
+}
+
 static void webDelete() {
   String n = server.arg("n");
   bool ok = deleteOneFile(n);
-  if (ok) {
-    char m[104];
-    snprintf(m, sizeof(m), "WLAN: Datei geloescht: %s (von %s)", n.c_str(), server.client().remoteIP().toString().c_str());
-    logLine(m);
-    sdRemountAfterDelete();
-  }
-  server.sendHeader("Location", "/");
-  server.send(303, "text/plain", "");
+  char m[112];
+  snprintf(m, sizeof(m), "WLAN: Datei loeschen: %s -> %s (von %s)", n.c_str(), ok ? "geloescht" : "nicht geloescht",
+           server.client().remoteIP().toString().c_str());
+  logLine(m);
+  if (ok) sdRemountAfterDelete();
+  webDeletedPage(ok ? 1 : 0, 1);
 }
 
 // Loescht mehrere per Checkbox ausgewaehlte Dateien auf einmal (POST, ein "del"-Feld je angehaktem Namen).
 static void webDeleteMulti() {
-  int n = 0;
+  int n = 0, req = 0;
+  std::vector<String> sel;
+  collectSelected(sel);
+  for (const String &nm : sel) {
+    req++;
+    if (deleteOneFile(nm)) n++;
+  }
+  char m[112];
+  snprintf(m, sizeof(m), "WLAN: Mehrfachloeschen: %d ausgewaehlt, %d geloescht (von %s)", req, n,
+           server.client().remoteIP().toString().c_str());
+  logLine(m);
+  if (n > 0) sdRemountAfterDelete();
+  // Antwort fuer das JavaScript der Dateiliste (fetch): reiner Text, die Seite zeigt ihn an und laedt neu
+  char r[96];
+  if (req <= 0) snprintf(r, sizeof(r), "Keine Datei ausgewählt.");
+  else if (n == req) snprintf(r, sizeof(r), "%d Datei(en) gelöscht.", n);
+  else snprintf(r, sizeof(r), "%d von %d Datei(en) gelöscht (Rest nicht gefunden/nicht erlaubt).", n, req);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/plain; charset=utf-8", r);
+}
+
+// Auswahl fuer den ZIP-Download vormerken: /zs?c=1&n=a&n=b ... (c=1 leert die Liste zuerst); danach holt der
+// Browser /zz (ZIP der vorgemerkten Namen, normaler Download).
+static void webStage() {
+  if (server.hasArg("c")) zipStaged.clear();
+  for (int i = 0; i < server.args(); i++)
+    if (server.argName(i) == "n" && zipStaged.size() < 2000) zipStaged.push_back(server.arg(i));
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/plain; charset=utf-8", String(zipStaged.size()));
+}
+
+// Loeschen in Paketen: /dg?c=1&n=a&n=b ... (c=1 setzt den Zaehler zurueck), am Ende /dg?fin=1 (SD neu einhaengen,
+// falls etwas geloescht wurde). Antwort "<angefragt> <geloescht>".
+static int delBatchDone = 0;
+static void webDelBatch() {
+  if (server.hasArg("c")) delBatchDone = 0;
+  int req = 0, n = 0;
   for (int i = 0; i < server.args(); i++) {
-    if (server.argName(i) != "del") continue;
+    if (server.argName(i) != "n") continue;
+    req++;
     if (deleteOneFile(server.arg(i))) n++;
   }
-  if (n > 0) {
-    char m[72];
-    snprintf(m, sizeof(m), "WLAN: %d Datei(en) geloescht (von %s)", n, server.client().remoteIP().toString().c_str());
+  delBatchDone += n;
+  if (server.hasArg("fin")) {
+    char m[96];
+    snprintf(m, sizeof(m), "WLAN: Mehrfachloeschen (Pakete): %d geloescht (von %s)", delBatchDone, server.client().remoteIP().toString().c_str());
     logLine(m);
-    sdRemountAfterDelete();
+    if (delBatchDone > 0) sdRemountAfterDelete();
+    delBatchDone = 0;
   }
-  server.sendHeader("Location", "/");
-  server.send(303, "text/plain", "");
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/plain; charset=utf-8", String(req) + " " + String(n));
 }
 
 // ---------- Favicon / Apple-Touch-Icon (kleiner Wetterballon, eingebettet als PNG/ICO) ----------
@@ -6128,6 +6513,9 @@ static void wifiServerStart() {
     server.on("/d", webDelete);
     server.on("/dm", HTTP_POST, webDeleteMulti);
     server.on("/zm", HTTP_POST, webZipSelected);
+    server.on("/zz", HTTP_GET, webZipSelected);
+    server.on("/zs", HTTP_GET, webStage);
+    server.on("/dg", HTTP_GET, webDelBatch);
     server.on("/zf", webZipShots);
     server.on("/zg", webZipGpx);
     server.on("/zl", webZipLogs);
@@ -7275,6 +7663,8 @@ static void doShutdown() {
 static void menuValue(int i, char *b, size_t n) {
   switch (i) {
     case MI_SEARCH: snprintf(b, n, "%s", fixedFreq ? "fest" : "Auto"); break;
+    case MI_TYPES:  snprintf(b, n, "%s", SONDE_TYPES == 0 ? "nur RS41" : (SONDE_TYPES == 2 ? "nur DFM" : "RS41 + DFM")); break;
+    case MI_RS41MODE: snprintf(b, n, "%s", RS41_ONESYNC == 0 ? "2 Schritte" : "2. Sync im Frame"); break;
     case MI_FREQ:   if (radioMode == 1) snprintf(b, n, "%.3f MHz", loraFreqMHz); else snprintf(b, n, "%.3f MHz", freqMHz); break;
     case MI_BW:     if (radioMode == 1) snprintf(b, n, "%.2f kHz", loraBwKHz); else snprintf(b, n, "%.1f kHz", rxBw); break;
     case MI_FIX:    snprintf(b, n, "%s", fixOn ? "an" : "aus"); break;
@@ -7291,9 +7681,11 @@ static void menuValue(int i, char *b, size_t n) {
       snprintf(b, n, "%s%s", sn[mapStyle % NSTYLE], styleAvail[mapStyle % NSTYLE] ? "" : " (fehlt)");
       break;
     }
+    case MI_BEEPVOL: snprintf(b, n, "%d%%", beepVol); break;
     case MI_BRIGHT: snprintf(b, n, "%d%%", brightPct); break;
     case MI_KB:     snprintf(b, n, "%s", kbMode == 0 ? "aus" : (kbMode == 1 ? "Taste" : "Taste+dunkel")); break;
     case MI_GPX:    snprintf(b, n, "%s", gpxOn ? "an" : "aus"); break;
+    case MI_GPSFILT: snprintf(b, n, "%s", GPS_FILTER ? "an" : "aus"); break;
     case MI_SDLOG:  snprintf(b, n, "%s", sdLogOn ? "an" : "aus"); break;
     case MI_WIFI: {
       int rq = recoveryCount();
@@ -7325,6 +7717,20 @@ static void menuStep(int i, int dir, bool big) {
   if (i != MI_SHUTDOWN) shutdownConfirm = false;
   switch (i) {
     case MI_SEARCH: fixedFreq = !fixedFreq; restartRx = true; break;
+    case MI_RS41MODE: {                              // 2 Schritte -> 2. Sync im Frame -> Fortsetzung; auch in config.ini gespeichert
+      RS41_ONESYNC = RS41_ONESYNC ? 0 : 1;
+      restartRx = true;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
+    case MI_TYPES: {                                 // nur RS41 -> RS41 + DFM -> nur DFM; wird auch in config.ini gespeichert
+      SONDE_TYPES = (SONDE_TYPES + (dir > 0 ? 1 : 2)) % 3;
+      restartRx = true;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
     case MI_FREQ:                                  // klein 10 kHz, gross 100 kHz; rollt am Rand auf die andere Seite um
       if (radioMode == 1) {                        // LoRa: eigener Wertebereich (70-cm-Band), kein "fest"-Umschalter
         loraFreqMHz += (big ? 0.100f : 0.010f) * dir;
@@ -7413,6 +7819,12 @@ static void menuStep(int i, int dir, bool big) {
       viewZ = -1;                                    // Hintergrund neu rendern
       break;
     }
+    case MI_BEEPVOL: {                               // klein 10 %, gross 25 %; bleibt an den Enden stehen; spielt zur Probe einen Ton
+      int v = (int)beepVol + dir * (big ? 25 : 10);
+      beepVol = (uint8_t)constrain(v, 0, 100);
+      beepPlay();
+      break;
+    }
     case MI_BRIGHT: {                                 // klein 5 %, gross 20 %; rollt am Rand auf die andere Seite um
       int v = (int)brightPct + dir * (big ? 20 : 5);
       const int lo = 10, span = 100 - 10 + 1;
@@ -7430,6 +7842,12 @@ static void menuStep(int i, int dir, bool big) {
       }
       break;
     case MI_GPX: gpxOn = !gpxOn; break;
+    case MI_GPSFILT: {                               // GPS-Ausreisserfilter an/aus; auch in config.ini gespeichert
+      GPS_FILTER = GPS_FILTER ? 0 : 1;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
     case MI_SDLOG: sdLogOn = !sdLogOn; if (sdLogOn) logEnableNow(); break;
     case MI_WIFI: {                                  // aus -> Heimnetz -> Zugangspunkt -> aus
       wifiBootSeq = false;                           // Nutzer greift selbst ein -- Boot-Sequenz (falls noch aktiv)
@@ -7541,6 +7959,10 @@ static bool menuApplyTyped(int i) {
       beepSec = (uint8_t)((v <= 0) ? 0 : (v == 1) ? 1 : (v < 5) ? 5 : (v > 20) ? 20 : v);
       return true;
     }
+    case MI_BEEPVOL:
+      beepVol = (uint8_t)constrain(atoi(editBuf), 0, 100);
+      beepPlay();
+      return true;
     case MI_BRIGHT: {
       int pct = atoi(editBuf);
       brightPct = (uint8_t)constrain(pct, 10, 100);
@@ -7600,8 +8022,8 @@ static void focusCycleOrRecenter() {
 // bleibt dann bei "-"/"+").
 static int menuOptionCount(int i) {
   switch (i) {
-    case MI_SEARCH: case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_SDLOG: case MI_SHUB: case MI_ID: return 2;
-    case MI_TBLOCK: case MI_KB: return 3;
+    case MI_SEARCH: case MI_RS41MODE: case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_GPSFILT: case MI_SDLOG: case MI_SHUB: case MI_ID: return 2;
+    case MI_TBLOCK: case MI_KB: case MI_TYPES: return 3;
     case MI_BW: return radioMode == 1 ? NLORABW : 7;
     case MI_MAP: return NSTYLE;
     case MI_SF: return NLORASF;
@@ -7615,10 +8037,12 @@ static int menuOptionCount(int i) {
 static void menuOptionLabel(int i, int idx, char *b, size_t n) {
   switch (i) {
     case MI_SEARCH: snprintf(b, n, "%s", idx == 0 ? "Auto" : "fest"); break;
+    case MI_TYPES:  snprintf(b, n, "%s", idx == 0 ? "nur RS41" : (idx == 1 ? "RS41 + DFM" : "nur DFM")); break;
+    case MI_RS41MODE: snprintf(b, n, "%s", idx == 0 ? "2 Schritte" : "2. Sync im Frame"); break;
     case MI_BW:     if (radioMode == 1) snprintf(b, n, "%.2f kHz", loraBwList[idx]); else snprintf(b, n, "%.1f kHz", bwList[idx]); break;
     case MI_SF:     snprintf(b, n, "SF%d", loraSfList[idx]); break;
     case MI_CR:     snprintf(b, n, "4/%d", loraCrList[idx]); break;
-    case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_SDLOG:
+    case MI_FIX: case MI_PRED: case MI_OWN: case MI_GPX: case MI_GPSFILT: case MI_SDLOG:
       snprintf(b, n, "%s", idx == 0 ? "aus" : "an"); break;
     case MI_SHUB:   snprintf(b, n, "%s", radioMode == 1 ? (idx == 0 ? "aus" : "an") : (idx == 0 ? "aus" : "Chase-Car")); break;
     case MI_ID:     snprintf(b, n, "%s", idx == 0 ? "Sondenempfang" : "LoRa"); break;
@@ -7637,6 +8061,8 @@ static void menuOptionLabel(int i, int idx, char *b, size_t n) {
 static int menuCurrentIndex(int i) {
   switch (i) {
     case MI_SEARCH: return fixedFreq ? 1 : 0;
+    case MI_TYPES:  return (int)(SONDE_TYPES % 3);
+    case MI_RS41MODE: return RS41_ONESYNC ? 1 : 0;
     case MI_BW: {
       int idx = 0;
       if (radioMode == 1) {
@@ -7652,6 +8078,7 @@ static int menuCurrentIndex(int i) {
     case MI_PRED:   return predOn ? 1 : 0;
     case MI_OWN:    return ownTrailOn ? 1 : 0;
     case MI_GPX:    return gpxOn ? 1 : 0;
+    case MI_GPSFILT: return GPS_FILTER ? 1 : 0;
     case MI_SDLOG:  return sdLogOn ? 1 : 0;
     case MI_SHUB:   return radioMode == 1 ? (loraTxOn ? 1 : 0) : sondehubMode;
     case MI_ID:     return radioMode;
@@ -7667,6 +8094,20 @@ static int menuCurrentIndex(int i) {
 static void menuSetIndex(int i, int idx) {
   switch (i) {
     case MI_SEARCH: fixedFreq = (idx != 0); restartRx = true; break;
+    case MI_RS41MODE: {
+      RS41_ONESYNC = idx != 0 ? 1 : 0;
+      restartRx = true;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
+    case MI_TYPES: {
+      SONDE_TYPES = (uint32_t)constrain(idx, 0, 2);
+      restartRx = true;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
     case MI_BW:
       if (radioMode == 1) { loraBwKHz = loraBwList[constrain(idx, 0, NLORABW - 1)]; loraParamsChanged = true; }
       else { rxBw = bwList[constrain(idx, 0, 6)]; restartRx = true; }
@@ -7680,6 +8121,12 @@ static void menuSetIndex(int i, int idx) {
       if (!ownTrailOn) { ownN = 0; ownMinDist = 10.0f; }
       break;
     case MI_GPX: gpxOn = (idx != 0); break;
+    case MI_GPSFILT: {
+      GPS_FILTER = idx != 0 ? 1 : 0;
+      int ap = 0, un = 0;
+      saveConfigIniToSd(buildConfigIniText(), &ap, &un);
+      break;
+    }
     case MI_SDLOG: sdLogOn = (idx != 0); if (sdLogOn) logEnableNow(); break;
     case MI_SHUB:
       if (radioMode == 1) {
@@ -8256,6 +8703,9 @@ static void drawMenu(int sel) {
   } else if (sel == MI_PAN) {
     g->setTextColor(0x8410);
     g->print("Kartenpixel je Trackball-Impuls, 1..30");
+  } else if (sel == MI_BEEPVOL) {
+    g->setTextColor(0x8410);
+    g->print("0 = stumm ... 100 = laut, gilt fuer alle Toene");
   } else if (sel == MI_BEEP) {
     g->setTextColor(0x8410);
     g->print("0 aus, 1 je Paket, 5..20 Sekunden im Empfang");
@@ -8370,6 +8820,8 @@ static bool cfgParseRaw(CfgType type, const String &text, double &out) {
   if (text.length() == 0) return false;
   const char *v = text.c_str();
   char *endp = nullptr;
+  if (type == CFG_MS) return cfgParseTimeMs(v, out);
+  if (type == CFG_SEC) { double ms; if (!cfgParseTimeMs(v, ms)) return false; out = floor(ms / 1000.0 + 0.5); return true; }
   double d = (type == CFG_U32 || type == CFG_U16) ? (double)strtoul(v, &endp, 0)
             : (type == CFG_I32)                   ? (double)strtol(v, &endp, 0)
             :                                         strtod(v, &endp);
@@ -8381,7 +8833,7 @@ static bool cfgParseRaw(CfgType type, const String &text, double &out) {
 // Wendet einen bereits geprueften Wert auf die lebende Variable an (Farben: RGB888 -> RGB565, siehe RGB()-Makro).
 static void cfgApplyRaw(const CfgEntry &e, double v) {
   switch (e.type) {
-    case CFG_U32:    *(uint32_t *)e.ptr = (uint32_t)v; break;
+    case CFG_U32: case CFG_MS: case CFG_SEC: *(uint32_t *)e.ptr = (uint32_t)v; break;
     case CFG_I32:    *(int *)e.ptr      = (int)v; break;
     case CFG_FLOAT:  *(float *)e.ptr    = (float)v; break;
     case CFG_DOUBLE: *(double *)e.ptr   = v; break;
@@ -8428,6 +8880,13 @@ static void cfgMenuEdit(int idx) {
   char cur[32], out[32], hint[72];
   cfgFormatValue(e, cur, sizeof(cur));
   if (e.type == CFG_U16) snprintf(hint, sizeof(hint), "Bereich 0x%06lX..0x%06lX", (unsigned long)e.lo, (unsigned long)e.hi);
+  else if (e.type == CFG_MS || e.type == CFG_SEC) {
+    double k = (e.type == CFG_MS) ? 1000.0 : 1.0;
+    char lo[24], hi[24];
+    cfgFormatTimeMs((uint32_t)(e.lo / k * 1000.0), lo, sizeof(lo));
+    cfgFormatTimeMs((uint32_t)(e.hi / k * 1000.0), hi, sizeof(hi));
+    snprintf(hint, sizeof(hint), "Sek. | h:mm:ss.ttt | :mm  (%s..%s)", lo, hi);
+  }
   else snprintf(hint, sizeof(hint), "Bereich %g..%g", e.lo, e.hi);
   int n = textInput(e.name, out, sizeof(out), false, cur, hint);
   if (n < 0) return;                                  // per Backspace auf leerem Feld abgebrochen -- nichts aendern
@@ -8701,11 +9160,19 @@ static void handleInput() {
     gfxUpdate();
     return;
   }
-  if (e == EV_CLICK) {                               // Trackballklick: im LoRa-Modus mit eingeschaltetem Upload
-                                                      // (Menue A) sofort die eigene Position senden, unabhaengig vom
-                                                      // Zeit-/Wegstrecke-Takt in aprsBeaconTick() (der laeuft
-                                                      // unveraendert weiter) -- sonst (wie bisher) nur Ansicht wechseln
-    if (radioMode == 1 && loraTxOn) {
+  if (e == EV_CLICK) {                               // Trackballklick sendet immer nur die eigene Position sofort
+                                                      // (im LoRa-Modus mit eingeschaltetem Upload, Menue A),
+                                                      // unabhaengig vom Zeit-/Wegstrecke-Takt in aprsBeaconTick()
+                                                      // (der laeuft unveraendert weiter) -- wechselt NICHT mehr
+                                                      // zusaetzlich die Ansicht (Wunsch Okt. 2026, "irritiert"):
+                                                      // geht's nicht, kommt dafuer immer ein erklaerender Toast,
+                                                      // die Ansicht bleibt wie sie war. Leertaste wechselt die
+                                                      // Ansicht unveraendert weiter, siehe cycleView() dort.
+    if (radioMode != 1) {
+      toastFor("LoRa", "nicht gesendet (nicht im LoRa-APRS-Modus, Menue I)", TOAST_MS_LONG);
+    } else if (!loraTxOn) {
+      toastFor("LoRa", "nicht gesendet (eigener Beacon aus, Menue A)", TOAST_MS_LONG);
+    } else {
       double lat, lon;
       if (homePosition(lat, lon)) {   // manuell ausgeloest: Qualitaets-Gate (Sat/HDOP) bewusst NICHT geprueft,
                                        // siehe webViewSendPos()/Changelog -- wer die Position auf der Karte
@@ -8718,8 +9185,6 @@ static void handleInput() {
       } else {                                                 // beim Fahren/Laufen bleibt sonst kaum Zeit zum Lesen
         toastFor("LoRa", "nicht gesendet (kein aktueller GPS-Fix)", TOAST_MS_LONG);
       }
-    } else {
-      cycleView();
     }
     return;
   }
@@ -8760,8 +9225,9 @@ static void handleInput() {
                                                      // tatsaechlich > 8 km/h fahren zu muessen (bleibt rein im RAM,
                                                      // kein Eintrag in Settings oder SD-Log)
     dbgSpeedOverride = (dbgSpeedOverride >= 0.0f) ? -1.0f : (OWN_SPEED_BIG_KMH + 12.0f);
+    dbgSpeedUntilMs = millis() + DBG_SPEED_TEST_MS;
     char v[24];
-    if (dbgSpeedOverride >= 0.0f) snprintf(v, sizeof(v), "%.0f km/h (Test)", dbgSpeedOverride);
+    if (dbgSpeedOverride >= 0.0f) snprintf(v, sizeof(v), "%.0f km/h, 30 s", dbgSpeedOverride);
     else snprintf(v, sizeof(v), "aus");
     toast("Test-Tempo", v);
     return;
@@ -9010,17 +9476,21 @@ bool waitPacket(uint8_t *buf, int len, uint32_t ms) {
   return false;
 }
 
-// Schritt 1: Header-Sync, danach CAP1_LEN Bytes
+static void armSync3();
+// Schritt 1: Header-Sync, danach cap1Len Bytes (180 klassisch, 255 im Einzel-Sync-Modus)
 bool captureHeader(float fMHz, uint32_t timeoutMs) {
   radio.standby();
   radio.setRxBandwidth(rxBw);
   radio.setFrequency(fMHz, false);
   radio.setSyncWord((uint8_t *)SYNC_HDR, 8);
   radio.setPreambleLength(16);
-  radio.fixedPacketLengthMode(CAP1_LEN);
+  cap1Len = CAP1_LEN;
+  radio.fixedPacketLengthMode(cap1Len);
   rxFlag = false;
   radio.startReceive();
-  return waitPacket(raw1, CAP1_LEN, timeoutMs);
+  if (!waitPacket(raw1, cap1Len, timeoutMs)) return false;
+  if (RS41_ONESYNC != 0) armSync3();      // sofort auf den Positionsblock dieses Frames scharf machen
+  return true;
 }
 
 // ---------- Direkte SX126x-Befehle (an RadioLib vorbei) ----------
@@ -9053,6 +9523,25 @@ static void setPacketParamsNoPreamble(uint8_t syncBits, uint8_t payloadLen) {
                   0x01,          // CRC aus
                   0x00};         // Whitening aus
   sxCommand(0x8C, d, 9);
+}
+
+// Modus 1: zweiter Sync im selben Frame auf ID/Laenge des Positionsblocks 0x7B (Frame-Pos. 0x112). Bauteile wie
+// armBlockPos() (dort am Geraet bestaetigt), nur dass der Block im LAUFENDEN Frame liegt: Schritt 1 endet bei Pos. 187,
+// der Block beginnt erst bei 274 -- ca. 140 ms Zeit zum Scharfmachen.
+static void armSync3() {
+  uint8_t sy[2] = {rev8(SYNC3_ID ^ MASK[SYNC3_POS & 63]), rev8(SYNC3_LEN ^ MASK[(SYNC3_POS + 1) & 63])};
+  radio.standby();
+  radio.setSyncWord(sy, 2);
+  radio.setPreambleLength(0);
+  radio.fixedPacketLengthMode(CAP3_LEN);
+  radio.startReceive();
+  uint8_t sb = 0x00;
+  sxCommand(0x80, &sb, 1);
+  setPacketParamsNoPreamble(16, CAP3_LEN);
+  rxFlag = false;
+  uint8_t rx[3] = {0xFF, 0xFF, 0xFF};
+  sxCommand(0x82, rx, 3);
+  contArmUs = micros();
 }
 
 // Schritt 2: Sync auf ID/Laenge des Blocks 0x7D, danach CAP2_LEN Bytes (ohne Praeambel-Erkennung)
@@ -9636,18 +10125,18 @@ bool trackSonde(float fMHz) {
     frameCount++;
     VLOG("\n=== Frame %lu | %.3f MHz | Paket-RSSI %.1f dBm | t=%lu ms ===\n",
                   (unsigned long)frameCount, fMHz, pktRssi, (unsigned long)millis());
-    hexDump("RAW Schritt 1 (wie empfangen)", raw1, CAP1_LEN, 8);
+    hexDump("RAW Schritt 1 (wie empfangen)", raw1, cap1Len, 8);
 
     memset(fr, 0, sizeof(fr));
-    unscramble(raw1, CAP1_LEN, 8);
-    hexDump("ENTWUERFELT Schritt 1", &fr[8], CAP1_LEN, 8);
+    unscramble(raw1, cap1Len, 8);
+    hexDump("ENTWUERFELT Schritt 1", &fr[8], cap1Len, 8);
     VLOG("Frametyp @0x038: %02X\n", fr[0x38]);
 
     // Bloecke ab 0x39 durchlaufen
     String blocks = "";
     int nFix = 0;                                 // per 1-Bit-Korrektur reparierte Bloecke in diesem Frame
     int pGps = -1;
-    int p = 0x39, endPos = 8 + CAP1_LEN;
+    int p = 0x39, endPos = 8 + cap1Len;
     while (p + 4 <= endPos) {
       uint8_t id = fr[p], len = fr[p + 1];
       if (id < 0x76 || id > 0x8F || p + len + 4 > endPos) break;
@@ -9720,13 +10209,38 @@ bool trackSonde(float fMHz) {
     // ---- Schritt 2: Rest des NAECHSTEN Frames ab Block 0x7D ----
     // Frame N+1 beginnt ca. 687 ms nach dem Ende von Schritt 1, Block 0x7D ca. 300 ms spaeter.
     bool got = false;
+    bool contOk = false;       // zweiter Sync im Frame hat den Positionsblock geliefert, Schritt 2 (naechster Frame) nicht noetig
     uint32_t sinceEnd = millis() - lastOk;
-    if (sinceEnd < 900) {
+    if (RS41_ONESYNC) {
+      // Der zweite Sync wurde in captureHeader() sofort nach Schritt 1 scharf gemacht (armSync3()).
+      contTry++;
+      bool gotC = waitPacket(raw3, CAP3_LEN, 400);
+      if (gotC) {          // Modus 1: Sync auf 0x7B getroffen, Block per CRC pruefen
+        fr[SYNC3_POS] = SYNC3_ID;
+        fr[SYNC3_POS + 1] = SYNC3_LEN;
+        unscramble(raw3, CAP3_LEN, SYNC3_POS + 2);
+        if (blockCrcFix(SYNC3_POS) > 0) {
+          contOk = got = true;
+          contHit++;
+          VLOG("Zweiter Sync im Frame: Positionsblock ok, RxDone->scharf %lu us [%lu/%lu]\n",
+                        (unsigned long)(contArmUs - rxIsrUs), (unsigned long)contHit, (unsigned long)contTry);
+        } else {
+          VLOG("Zweiter Sync im Frame: Block 0x7B ohne gueltige CRC -> Fallback Schritt 2 [%lu/%lu]\n", (unsigned long)contHit, (unsigned long)contTry);
+          memset(&fr[SYNC3_POS], 0, FRAME_LEN - SYNC3_POS);
+          hexDump("RAW Block 0x7B ff.", raw3, CAP3_LEN, SYNC3_POS + 2);
+        }
+      } else {
+        VLOG("Zweiter Sync im Frame: Positionsblock nicht empfangen -> Fallback Schritt 2\n");
+      }
+      sinceEnd = millis() - lastOk;
+    }
+    if (!contOk && sinceEnd < 900) {
       while (millis() - lastOk < 700) { gpsPoll(); handleInput(); delay(1); }   // nicht zu frueh scharf stellen (weniger Fehltreffer)
       armBlockPos();
       got = waitPacket(raw2, CAP2_LEN, 600);
     }
-    VLOG("Schritt 2 (Sync %02X %02X fuer Block @0x%03X im naechsten Frame): empfangen: %s (Start %lu ms nach Schritt 1)\n",
+    if (!contOk)
+      VLOG("Schritt 2 (Sync %02X %02X fuer Block @0x%03X im naechsten Frame): empfangen: %s (Start %lu ms nach Schritt 1)\n",
                   syncPos[0], syncPos[1], SYNC2_POS, got ? "ja" : "nein", (unsigned long)sinceEnd);
 
     bool havePos = false;
@@ -9737,11 +10251,13 @@ bool trackSonde(float fMHz) {
     bool posRejected = false;  // Position war unplausibel (Sprung, Hoehe) und wurde verworfen
     String blocks2 = "";
     if (got) {
-      fr[SYNC2_POS] = SYNC2_ID;
-      fr[SYNC2_POS + 1] = SYNC2_LEN;
-      hexDump("RAW Schritt 2 (wie empfangen)", raw2, CAP2_LEN, SYNC2_POS + 2);
-      unscramble(raw2, CAP2_LEN, SYNC2_POS + 2);
-      hexDump("ENTWUERFELT Schritt 2 (ab Block-ID)", &fr[SYNC2_POS], CAP2_LEN + 2, SYNC2_POS);
+      if (!contOk) {
+        fr[SYNC2_POS] = SYNC2_ID;
+        fr[SYNC2_POS + 1] = SYNC2_LEN;
+        hexDump("RAW Schritt 2 (wie empfangen)", raw2, CAP2_LEN, SYNC2_POS + 2);
+        unscramble(raw2, CAP2_LEN, SYNC2_POS + 2);
+      }
+      hexDump("ENTWUERFELT ab Block-ID 0x7D", &fr[SYNC2_POS], FRAME_LEN - SYNC2_POS, SYNC2_POS);
       int q = SYNC2_POS, pPos = -1;
       while (q + 4 <= FRAME_LEN) {
         uint8_t id = fr[q], len = fr[q + 1];
@@ -9825,10 +10341,12 @@ bool trackSonde(float fMHz) {
       {
         String m = String("RX ohne Anzeige (") + reason + ") f=" + String(fMHz, 3) + " ID=" + sid + " raw1=";
         char hb[3];
-        for (int i = 0; i < CAP1_LEN; i++) { snprintf(hb, sizeof(hb), "%02X", raw1[i]); m += hb; }
+        for (int i = 0; i < cap1Len; i++) { snprintf(hb, sizeof(hb), "%02X", raw1[i]); m += hb; }
         if (got) {
-          m += " raw2=";
-          for (int i = 0; i < CAP2_LEN; i++) { snprintf(hb, sizeof(hb), "%02X", raw2[i]); m += hb; }
+          m += contOk ? " raw3=" : " raw2=";
+          const uint8_t *rr = contOk ? raw3 : raw2;
+          int rn = contOk ? CAP3_LEN : CAP2_LEN;
+          for (int i = 0; i < rn; i++) { snprintf(hb, sizeof(hb), "%02X", rr[i]); m += hb; }
         }
         logLine(m.c_str());
       }
@@ -9906,6 +10424,7 @@ bool trackSonde(float fMHz) {
       else if (posRejected) n += snprintf(ln + n, sizeof(ln) - n, "Pos verworfen ");
       else if (posBlock) n += snprintf(ln + n, sizeof(ln) - n, "Pos kein Fix (SV%d) ", nsv);
       else n += snprintf(ln + n, sizeof(ln) - n, "Pos -- (S2 %s) ", got ? "ja" : "nein");
+      n += snprintf(ln + n, sizeof(ln) - n, "[%s] ", RS41_ONESYNC == 0 ? "S2" : (contOk ? "S3" : "S3->S2"));   // Empfangsweg: zweiter Sync im Frame / Rueckfall Schritt 2 / klassisch
       if (havePos && predValid) n += snprintf(ln + n, sizeof(ln) - n, "Land %lu:%02lu %.5f %.5f ", (unsigned long)(predEtaS / 60),
                                               (unsigned long)(predEtaS % 60), predLat, predLon);
       if (havePos && onlinePredValid) n += snprintf(ln + n, sizeof(ln) - n, "LandOnline %.5f %.5f ", onlinePredLat, onlinePredLon);
@@ -9938,6 +10457,540 @@ bool trackSonde(float fMHz) {
     }
   }
   return everGot;
+}
+
+// ===========================================================================================================
+// DFM-06 / DFM-09 / DFM-17 (Graw)  --  Feature v6.0.0
+//
+// QUELLE / REFERENZ: https://github.com/dl9rdz/rdz_ttgo_sonde  (dl9rdz = Hansi Reiser, Datei RX_FSK/src/DFM.cpp/.h,
+// SPDX-License-Identifier GPL-2.0+; ihrerseits nach oe5dxl (dxlaprs, "finddfname") und rs1729/RS). Das Verfahren
+// (Sync-Muster 0x6566A5AA bzw. invertiert 0x9A995A55, je Datenbit ZWEI Rohbit -> das erste zaehlt, 33-Byte-Frame
+// mit CFG-Block (7 Nibble) und zwei DAT-Bloecken (je 13 Nibble), Entschachtelung, erweiterter Hamming(8,4)
+// mit 1-Bit-Korrektur, DAT-Typen 0..4 und 8, ID-Erkennung ueber mehrere CFG-Frames, Untertyp aus Kanalnummer und
+// Messwert 6) ist von dort uebernommen und fuer den SX1262/RadioLib neu geschrieben; die Auswertung der
+// Positionsfelder folgt DFM.cpp (decodeDAT). Dieses Projekt steht unter GPL-3.0, GPL-2.0-oder-spaeter ist damit
+// vertraeglich.
+// Anders als dort: der SX1262 hat nur EIN Sync-Wort -> beide Polarituaeten werden abwechselnd gesucht; Frames
+// werden einzeln als Paket (66 Rohbytes nach 16 Bit Sync) gelesen statt per FIFO-Strom.
+// UNGETESTET an echter Hardware.
+// ===========================================================================================================
+#define DFM_RAW_LEN   66          // 33 Datenbytes * 16 Rohbit / 8
+#define DFM_ACQ_WIN   480         // Suchfenster je Polaritaet [ms]: Frame alle ~224 ms + 211 ms Frame-Dauer
+#define DFM_ACQ_MS    2000        // Gesamtzeit fuer den ersten Versuch auf einer Frequenz
+#define DFM_MAXIDAGE  1800
+static const uint8_t DFM_SYNC_NORMAL[2]  = {0x5A, 0x55};   // letzte 16 Bit von 0x9A995A55
+static const uint8_t DFM_SYNC_INVERSE[2] = {0xA5, 0xAA};   // letzte 16 Bit von 0x6566A5AA
+static const char *const dfmSubtypeShort[] = {"", "DFMx", "DFM6", "DF6P", "PS15", "DFM9", "DF9P", "DF17", "D17P"};
+enum { DFM_UNDEF = 0, DFM_UNK, DFM_06, DFM_06P, DFM_PS15, DFM_09, DFM_09P, DFM_17, DFM_17P };
+
+// erweiterte Hamming(8,4)-Paritaetsmatrix und 1-Bit-Fehler-Syndrome (wie rdz DFM.h)
+static const uint8_t DFM_H[4][8] = {{0, 1, 1, 1, 1, 0, 0, 0}, {1, 0, 1, 1, 0, 1, 0, 0}, {1, 1, 0, 1, 0, 0, 1, 0}, {1, 1, 1, 0, 0, 0, 0, 1}};
+static const uint8_t DFM_HE[8] = {0x7, 0xB, 0xD, 0xE, 0x8, 0x4, 0x2, 0x1};
+
+static struct DfmSt {        // ID-/Typerkennung ueber mehrere Frames (wie dfmstate in rdz)
+  int idcnt0, idcnt1;
+  int32_t lastfrid;
+  int lastfrcnt;
+  uint8_t invers;
+  uint8_t start[50];
+  uint16_t dat[100];
+  uint8_t cnt[100];
+  uint16_t good;
+  uint32_t datesec;
+  uint8_t frame, posmode;
+  uint16_t msec;
+  uint8_t nameregok, nameregtop, lastdat;
+  float meas[9];
+  uint16_t measok;
+  uint8_t ptu_chan, sensP;
+  char id[10];
+  bool validID;
+  uint8_t subtype;
+} dfs;
+
+static struct DfmPos {        // zuletzt decodierte Positionsfelder
+  double lat, lon, alt;
+  float hs, vs, dir;
+  uint8_t sats;
+  uint8_t fresh;              // Bit0 lat, Bit1 lon, Bit2 alt seit der letzten Ausgabe neu
+} dp;
+
+static bool lastKindDfm = false;       // zuletzt wurde eine DFM (nicht RS41) empfangen
+static float dfmLastF = 0;
+static uint32_t dfmLastMs = 0, dfmFrames = 0, dfmBadFrames = 0;
+
+static void dfmKillId() {
+  memset(&dfs, 0, sizeof(dfs));
+}
+
+static int dfmCheck(uint8_t code[8]) {
+  uint8_t syn[4];
+  for (int i = 0; i < 4; i++) {
+    syn[i] = 0;
+    for (int j = 0; j < 8; j++) syn[i] ^= DFM_H[i][j] & code[j];
+  }
+  uint32_t sv = 0;
+  for (int j = 0; j < 4; j++) sv |= (uint32_t)syn[j] << (3 - j);
+  int ret = 0;
+  if (sv) {
+    ret = -1;
+    for (int j = 0; j < 8; j++)
+      if (sv == DFM_HE[j]) { ret = j + 1; break; }
+  }
+  if (ret > 0) code[ret - 1] ^= 1;
+  return ret;
+}
+
+// L Nibble (je 8 Bit mit Parity) -> 4*L Datenbits; Rueckgabe: Zahl korrigierter Bits, -1 = nicht korrigierbar
+static int dfmHamming(uint8_t *ham, int L, uint8_t *sym) {
+  int ret = 0;
+  for (int i = 0; i < L; i++) {
+    int res = dfmCheck(ham + 8 * i);
+    if (res < 0) ret = -1;
+    else if (ret >= 0 && res > 0) ret++;
+    for (int j = 0; j < 4; j++) sym[4 * i + j] = ham[8 * i + j];
+  }
+  return ret;
+}
+
+static void dfmDeinterleave(const uint8_t *str, int L, uint8_t *block) {
+  for (int j = 0; j < 8; j++)
+    for (int i = 0; i < L; i++) {
+      int k = L * j + i;
+      block[8 * i + j] = ((str[k / 8] >> (7 - (k & 7))) & 1) ? 0 : 1;
+    }
+}
+
+static void dfmBitsToBytes(const uint8_t *bits, uint8_t *bytes, int nibbles) {
+  int i;
+  for (i = 0; i < nibbles * 4; i++) bytes[i / 8] = (bytes[i / 8] << 1) | (bits[i] ? 1 : 0);
+  bytes[(i - 1) / 8] &= 0x0F;
+}
+
+// ID-Erkennung aus den CFG-Frames (nach oe5dxl finddfname / rdz DFM::finddfname)
+static void dfmFindName(const uint8_t *b) {
+  uint8_t st = b[0], ix = b[3];
+  uint16_t d = (b[1] << 8) + b[2];
+  const int THR = 2;
+  if (dfs.idcnt0 < THR && dfs.idcnt1 < THR) {
+    int32_t v = ((int32_t)st << 20) | ((int32_t)d << 4) | ix;
+    if (st > (dfs.lastfrid >> 20)) {
+      dfs.lastfrid = v;
+      dfs.lastfrcnt = 0;
+    } else if (st == (dfs.lastfrid >> 20)) {
+      if (v == dfs.lastfrid) {
+        ++dfs.lastfrcnt;
+        int thres = THR * 2;
+        if (ix <= 1) thres *= 2;
+        if ((st >> 4) != 6) thres *= 2;
+        if (dfs.lastfrcnt >= thres) {
+          if (dfs.lastfrcnt == thres) {
+            uint32_t id = ((uint32_t)(st & 0x0F) << 20) | ((uint32_t)d << 4) | ix;
+            uint32_t chk = id;
+            int i;
+            for (i = 0; i < 6; i++) {
+              if ((chk & 0x0f) > 9) break;
+              chk >>= 4;
+            }
+            if (i == 6) {
+              snprintf(dfs.id, sizeof(dfs.id), "D%lx", (unsigned long)id);
+              dfs.validID = true;
+              dfs.subtype = 0;
+              dfs.ptu_chan = (st >> 4) & 0x0F;
+              return;
+            }
+            dfs.lastfrcnt = 0;
+          }
+        }
+      } else {
+        dfs.lastfrid = v;
+        dfs.lastfrcnt = 0;
+      }
+    }
+  }
+  int i = 0;
+  while (i < dfs.nameregtop && dfs.start[i] != st) i++;
+  if (i < dfs.nameregtop) {
+    if (ix <= 1 && (dfs.cnt[2 * i + ix] == 0 || dfs.dat[2 * i + ix] == d)) {
+      dfs.dat[2 * i + ix] = d;
+      if (dfs.cnt[2 * i + ix] < 255) dfs.cnt[2 * i + ix]++;
+      if ((dfs.cnt[2 * i] > THR && dfs.cnt[2 * i + 1] > THR) ||
+          (dfs.cnt[2 * i] > 0 && dfs.cnt[2 * i + 1] > 0 && st == (dfs.lastfrid >> 20) && (st >> 4) > 6)) {
+        if (dfs.idcnt0 <= 1) {
+          dfs.idcnt0 = dfs.cnt[2 * i];
+          dfs.idcnt1 = dfs.cnt[2 * i + 1];
+          dfs.nameregok = i;
+          // ID passt in sondeId[9]: "D" + die letzten 7 Stellen der laufenden Nummer (rdz: "D%d" % 1e8)
+          snprintf(dfs.id, sizeof(dfs.id), "D%07lu", (unsigned long)((((uint32_t)dfs.dat[2 * i] << 16) | dfs.dat[2 * i + 1]) % 10000000UL));
+          dfs.validID = true;
+          dfs.subtype = 0;
+          dfs.ptu_chan = (st >> 4) & 0x0F;
+        }
+      }
+    } else {
+      dfs.cnt[2 * i] = 0;
+      dfs.cnt[2 * i + 1] = 0;
+      if (dfs.nameregok == i) { dfs.idcnt0 = 0; dfs.idcnt1 = 0; }
+    }
+  } else if (ix <= 1) {
+    dfs.start[dfs.nameregtop] = st;
+    dfs.cnt[2 * dfs.nameregtop] = 0;
+    dfs.cnt[2 * dfs.nameregtop + 1] = 0;
+    dfs.cnt[2 * dfs.nameregtop + ix] = 1;
+    dfs.dat[2 * dfs.nameregtop + ix] = d;
+    if (dfs.nameregtop < 49) dfs.nameregtop++;
+  }
+}
+
+static void dfmDecodeCFG(const uint8_t *cfg) {
+  dfmFindName(cfg);
+  uint8_t conf_id = cfg[0] >> 4;
+  if (conf_id <= 8) {
+    uint32_t val = ((uint32_t)cfg[1] << 12) | ((uint32_t)cfg[2] << 4) | cfg[3];
+    uint8_t ex = cfg[0] & 0xF;
+    dfs.meas[conf_id] = val / (float)(1 << ex);
+    dfs.measok |= (1 << conf_id);
+  }
+  if (dfs.validID && dfs.subtype == 0 && (dfs.measok & (1 << 6))) {
+    switch (dfs.ptu_chan) {
+      case 0x6: dfs.subtype = DFM_06; break;
+      case 0x7: case 0x8: dfs.subtype = DFM_06P; dfs.sensP = 1; break;
+      case 0xA: dfs.subtype = dfs.invers ? DFM_17 : DFM_09; break;       // 17 oder 09, nach Polaritaet entschieden
+      case 0xB: dfs.subtype = DFM_17; break;
+      case 0xC:
+        if (dfs.meas[6] < 220e3) { dfs.subtype = DFM_09P; dfs.sensP = 1; }
+        else dfs.subtype = DFM_17;
+        break;
+      case 0xD: dfs.subtype = DFM_17P; dfs.sensP = 1; break;
+      default: dfs.subtype = DFM_UNK;
+    }
+  }
+}
+
+static const uint16_t DFM_MON[13] = {0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+
+static void dfmDecodeDAT(const uint8_t *dat) {
+  uint8_t t = dat[6];
+  if (t == 8) {
+    int y = (dat[0] << 4) + (dat[1] >> 4);
+    int m = dat[1] & 0x0F;
+    int d = dat[2] >> 3;
+    int h = ((dat[2] & 0x07) << 2) + (dat[3] >> 6);
+    int mi = dat[3] & 0x3F;
+    dp.sats = dat[4];
+    int tt = (y - 1970) * 365 + (y - 1969) / 4;
+    if (m <= 12) { tt += DFM_MON[m]; if ((y % 4) == 0 && m > 2) tt++; }
+    tt = (tt + d - 1) * 86400 + h * 3600 + mi * 60;
+    // rdz verwirft hier bei grossem Zeitsprung die ID (neue Sonde). Beim allerersten Datum (datesec == 0) NICHT,
+    // sonst ginge die gerade erkannte ID sofort wieder verloren.
+    if (dfs.datesec != 0 && abs((int)(tt - (int)dfs.datesec)) > DFM_MAXIDAGE) dfmKillId();
+    dfs.datesec = tt;
+    dfs.good |= 0x100;
+  } else if (t > 8) return;
+
+  if (t == 8 || t < dfs.lastdat) {
+    dfs.good = 0;
+    dfs.lastdat = 0;
+  } else {
+    dfs.lastdat = t;
+  }
+  dfs.good |= (1 << t);
+
+  auto i32 = [&](int o) { return (int32_t)(((uint32_t)dat[o] << 24) + ((uint32_t)dat[o + 1] << 16) + ((uint32_t)dat[o + 2] << 8) + dat[o + 3]); };
+  auto u16 = [&](int o) { return (uint16_t)(((uint16_t)dat[o] << 8) + dat[o + 1]); };
+  auto setLat = [&](double lat) {
+    if (lat != 0 && dp.lat != 0 && fabs(lat - dp.lat) > .25) dfmKillId();
+    dp.lat = lat; if (lat != 0) dp.fresh |= 1;
+  };
+  auto setLon = [&](double lon) {
+    if (lon != 0 && dp.lon != 0 && fabs(lon - dp.lon) > .25) dfmKillId();
+    dp.lon = lon; if (lon != 0) dp.fresh |= 2;
+  };
+  switch (t) {
+    case 0:
+      dfs.frame = dat[3];
+      dfs.posmode = dat[2];
+      if (dat[2] <= 1 || dat[2] >= 5) dfs.posmode = 2;
+      if (dfs.posmode >= 3) {
+        dfs.msec = u16(0);
+        dp.hs = u16(4) * 0.01f;
+      }
+      break;
+    case 1:
+      if (dfs.posmode <= 2) {
+        dfs.msec = u16(4);
+      } else {                                     // Lat + Richtung
+        setLat(i32(0) * 0.0000001);
+        dp.dir = u16(4) * 0.01f;
+      }
+      break;
+    case 2:
+      if (dfs.posmode <= 2) {                      // Lat + horizontale Geschwindigkeit
+        setLat(i32(0) * 0.0000001);
+        dp.hs = u16(4) * 0.01f;
+      } else {                                     // Lon + vertikale Geschwindigkeit
+        setLon(i32(0) * 0.0000001);
+        dp.vs = (int16_t)u16(4) * 0.01f;
+      }
+      break;
+    case 3:
+      if (dfs.posmode <= 2) {                      // Lon + Richtung
+        setLon(i32(0) * 0.0000001);
+        dp.dir = u16(4) * 0.01f;
+      } else {                                     // Hoehe
+        dp.alt = (uint32_t)i32(0) * 0.01;
+        if (dp.alt != 0) dp.fresh |= 4;
+      }
+      break;
+    case 4:
+      if (dfs.posmode <= 2) {                      // Hoehe + vertikale Geschwindigkeit
+        dp.alt = (uint32_t)i32(0) * 0.01;
+        dp.vs = (int16_t)u16(4) * 0.01f;
+        if (dp.alt != 0) dp.fresh |= 4;
+      }
+      break;
+    default: break;
+  }
+}
+
+// Ein Frame: 66 Rohbytes (nach dem Sync) -> 33 Datenbytes -> Entschachtelung -> Hamming -> CFG/DAT
+// inv: Sync der invertierten Polaritaet gefunden (Daten dann bitweise invertieren)
+// Rueckgabe: 0 = nichts brauchbar, 1 = brauchbar (mindestens ein Block ok)
+static int dfmDecodeFrame(const uint8_t *raw, bool inv) {
+  uint8_t data[33];
+  for (int i = 0; i < 33; i++) {
+    uint8_t b = 0;
+    for (int k = 0; k < 8; k++) {
+      int bit = 2 * (8 * i + k);
+      b = (b << 1) | ((raw[bit >> 3] >> (7 - (bit & 7))) & 1);
+    }
+    data[i] = inv ? (uint8_t)~b : b;
+  }
+  dfs.invers = inv ? 1 : 0;
+  uint8_t hc[56], h1[104], h2[104], bc[28], b1[52], b2[52];
+  dfmDeinterleave(data, 7, hc);
+  dfmDeinterleave(data + 7, 13, h1);
+  dfmDeinterleave(data + 20, 13, h2);
+  int r0 = dfmHamming(hc, 7, bc);
+  int r1 = dfmHamming(h1, 13, b1);
+  int r2 = dfmHamming(h2, 13, b2);
+  uint8_t cfg[4] = {0, 0, 0, 0}, d1[7] = {0}, d2[7] = {0};
+  dfmBitsToBytes(bc, cfg, 7);
+  dfmBitsToBytes(b1, d1, 13);
+  dfmBitsToBytes(b2, d2, 13);
+  VLOG("DFM CFG(%d):%02X%02X%02X%X DAT(%d):%02X%02X%02X%02X%02X%02X/%X DAT(%d):%02X%02X%02X%02X%02X%02X/%X\n",
+       r0, cfg[0], cfg[1], cfg[2], cfg[3], r1, d1[0], d1[1], d1[2], d1[3], d1[4], d1[5], d1[6],
+       r2, d2[0], d2[1], d2[2], d2[3], d2[4], d2[5], d2[6]);
+  int ok = 0;
+  if (r0 >= 0) { dfmDecodeCFG(cfg); ok = 1; }
+  if (r1 >= 0 && r1 <= 4) { dfmDecodeDAT(d1); ok = 1; }
+  if (r2 >= 0 && r2 <= 4) { dfmDecodeDAT(d2); ok = 1; }
+  return ok;
+}
+
+// Funk auf DFM umstellen (2500 Rohbit/s) bzw. zurueck auf RS41 (4800 Bit/s)
+static void dfmRadioMode(bool on) {
+  radio.standby();
+  radio.setBitRate(on ? 2.5f : BITRATE);
+  radio.setFrequencyDeviation(on ? 2.5f : FREQ_DEV);
+}
+
+// Empfang scharf machen: 16-Bit-Sync der gewaehlten Polaritaet, kein Praeambel-Detektor, 66 Bytes.
+// full = false: nur schnell neu starten (gleiche Einstellungen), siehe Rearm direkt nach jedem Frame.
+static void dfmArm(float fMHz, int pol, bool full) {
+  if (full) {
+    radio.standby();
+    radio.setRxBandwidth(rxBw);
+    radio.setFrequency(fMHz, false);
+    radio.setSyncWord((uint8_t *)(pol ? DFM_SYNC_INVERSE : DFM_SYNC_NORMAL), 2);
+    radio.setPreambleLength(0);
+    radio.fixedPacketLengthMode(DFM_RAW_LEN);
+    radio.startReceive();
+  }
+  uint8_t sb = 0x00;
+  sxCommand(0x80, &sb, 1);
+  setPacketParamsNoPreamble(16, DFM_RAW_LEN);
+  rxFlag = false;
+  uint8_t rx[3] = {0xFF, 0xFF, 0xFF};
+  sxCommand(0x82, rx, 3);
+}
+
+// Eine vollstaendig neue Position (lat+lon+alt) uebernehmen -- wie beim RS41 (Plausibilitaet, Sonde/Karte/GPX)
+static void dfmPublish(float fMHz, float pktRssi) {
+  double lat = dp.lat, lon = dp.lon, alt = dp.alt;
+  bool stOk = dfs.validID;
+  char sid[9] = "????????";
+  if (stOk) { strncpy(sid, dfs.id, 8); sid[8] = 0; }
+  int fnr = dfs.frame;
+  if (stOk && prevPosId[0] && strncmp(prevPosId, sid, 8) != 0) prevPosValid = false;
+  if (stOk) { strncpy(prevPosId, sid, 8); prevPosId[8] = 0; }
+  bool okPos = (alt > -500.0 && alt < 45000.0 && fabs(lat) <= 90.0 && fabs(lon) <= 180.0);
+  uint32_t nowP = millis();
+  if (okPos && prevPosValid && nowP - prevPosMs < 120000UL) {
+    double dtS = (nowP - prevPosMs) / 1000.0;
+    double dm = haversineKm(prevPosLat, prevPosLon, lat, lon) * 1000.0;
+    if (dm > 100.0 * dtS + 500.0) okPos = false;
+  }
+  if (!okPos) {
+    VLOG("DFM Position verworfen (unplausibel): %.5f %.5f %.0f m\n", lat, lon, alt);
+    line(72, "Pos: unplausibel verworfen", ST77XX_ORANGE);
+    return;
+  }
+  prevPosValid = true; prevPosLat = lat; prevPosLon = lon; prevPosMs = nowP;
+  float ve = dp.hs * sinf(dp.dir * (float)M_PI / 180.0f), vn = dp.hs * cosf(dp.dir * (float)M_PI / 180.0f), vu = dp.vs;
+  sondeVh = dp.hs; sondeDir = dp.dir; sondeVz = dp.vs;
+  haveVel = true;
+  if (!predVelInit) { predVe = ve; predVn = vn; predVz = vu; predVelInit = true; }
+  else {
+    predVe += PRED_SMOOTH_IN_ALPHA * (ve - predVe);
+    predVn += PRED_SMOOTH_IN_ALPHA * (vn - predVn);
+    predVz += PRED_SMOOTH_IN_ALPHA * (vu - predVz);
+  }
+  lastPosOkMs = millis();
+  if (beepSec == 1) beepPlay();
+  line(72, String("Pos: ") + String(lat, 5) + "  " + String(lon, 5), ST77XX_GREEN);
+  line(84, String("H ") + String(alt, 0) + " m  Steig " + String(sondeVz, 1) + " m/s  Tempo " + String(sondeVh * 3.6, 0) + " km/h " + String(sondeDir, 0) + " Grad", ST77XX_GREEN);
+  {
+    double hl, ho;
+    bool gf = homePosition(hl, ho);
+    line(96, String("Ich: ") + String(hl, 5) + " " + String(ho, 5) + (gf ? "  GPS " : "  fest ") + gps.sats + " Sat");
+  }
+  if (fabsf(fMHz - freqMHz) > 0.0005f) { freqMHz = fMHz; saveSettings(); }
+  bool firstPos = !haveSondePos;
+  sondeLat = lat; sondeLon = lon; sondeAlt = alt;
+  altTrackAdd(alt);
+  sondeRssi = pktRssi;
+  if (stOk) { sondeFnr = fnr; strncpy(sondeId, sid, 8); sondeId[8] = 0; }
+  else if (sondeId[0] == 0) strcpy(sondeId, "????????");
+  haveSondePos = true;
+  if (firstPos || (stOk && strncmp(viewIdSeen, sid, 8) != 0)) {
+    sondeFoundSeq++;
+    altTrackReset();
+    if (mapManual) {
+      char m[64];
+      snprintf(m, sizeof(m), "Karte: automatisch (%s)", firstPos ? "erste Sondenposition" : "neue Sonden-ID");
+      logLine(m);
+    }
+    if (stOk) { strncpy(viewIdSeen, sid, 8); viewIdSeen[8] = 0; }
+    predVelInit = false;
+    predPtInit = false;
+    onlinePredValid = false;
+    onlinePredNextMs = 0;
+    mapManual = false;
+    rFocus = 0;
+    viewZ = -1;
+    gpxDrain(gpxSonde, gpxBufSonde, gpxCountSonde, gpxSondeId, gpxSondeName);
+    gpxCloseTrack(gpxSonde);
+    gpxSafeId(sondeId, gpxSondeId, sizeof(gpxSondeId));
+    strncpy(gpxSondeName, sondeId, sizeof(gpxSondeName) - 1);
+    gpxSondeName[sizeof(gpxSondeName) - 1] = 0;
+    findPickRecentNote(gpxSondeId);
+  }
+  if (strcmp(sondeId, "????????") != 0)
+    gpxQueue(gpxSonde, gpxBufSonde, gpxCountSonde, gpxSondeId, gpxSondeName, lat, lon, (float)alt);
+  trailAdd(lat, lon, sondeId);
+  predictLanding();
+  lastMapMs = 0;
+  if (mapMode) gfxUpdate();
+  {
+    double hl, ho;
+    bool gf = homePosition(hl, ho);
+    char ln[260], tstr[12];
+    timeText(tstr, sizeof(tstr));
+    snprintf(ln, sizeof(ln), "t%lu %s DFM F%lu %s %s Nr%d %.0fdBm f%.3f bw%.1f Pos %.6f %.6f %.0fm v%.0fkmh/%03.0f/%+.1fms SV%d Ich %.5f %.5f %s S%d %.2fkm Bat%.2fV/%d%%%s",
+             (unsigned long)(millis() / 1000), tstr, (unsigned long)dfmFrames, stOk ? sid : "????????", dfmSubtypeShort[dfs.subtype < 9 ? dfs.subtype : 1],
+             fnr, pktRssi, fMHz, rxBw, lat, lon, alt, sondeVh * 3.6f, sondeDir, sondeVz, dp.sats, hl, ho, gf ? "GPS" : "fest", gps.sats,
+             haveSondePos ? haversineKm(hl, ho, lat, lon) : 0.0, batV, batPct, batChg ? "+" : "");
+    logLine(ln);
+  }
+}
+
+// DFM auf einer Frequenz verfolgen. Rueckgabe wie trackSonde(): true, wenn mindestens ein Frame ankam.
+bool trackDfm(float fMHz) {
+  if (fabsf(fMHz - dfmLastF) > 0.05f || millis() - dfmLastMs > 120000UL) {   // andere Frequenz/lange her: Erkennung neu
+    memset(&dfs, 0, sizeof(dfs));
+    memset(&dp, 0, sizeof(dp));
+  }
+  dfmLastF = fMHz;
+  uint32_t lastOk = millis();
+  bool everGot = false;
+  int pol = dfs.invers ? 1 : 0;
+  uint32_t tStart = millis();
+  dfmRadioMode(true);
+  static uint8_t rawD[DFM_RAW_LEN];
+  while (millis() - lastOk < (everGot ? (uint32_t)LOST_MS : (uint32_t)DFM_ACQ_MS)) {
+    gpsPoll();
+    handleInput();
+    if (restartRx) break;
+    if (!everGot) line(12, String("Lausche DFM ") + String(fMHz, 3) + " MHz" + (pol ? " (inv)" : ""));
+    dfmArm(fMHz, pol, true);
+    uint32_t win = everGot ? 1500 : DFM_ACQ_WIN;
+    // enge Warteschleife: Rearm direkt nach dem Auslesen, damit der Sync des naechsten Frames nicht verpasst wird
+    uint32_t t0 = millis();
+    bool got = false;
+    while (millis() - t0 < win) {
+      if (rxFlag) {
+        rxFlag = false;
+        got = (radio.readData(rawD, DFM_RAW_LEN) == RADIOLIB_ERR_NONE);
+        dfmArm(fMHz, pol, false);              // sofort weiter, vor dem Decodieren
+        break;
+      }
+      delay(1);
+    }
+    if (!got) {
+      if (!everGot) pol ^= 1;                  // noch nichts gefunden: andere Polaritaet probieren
+      if (mapMode) gfxUpdate();
+      continue;
+    }
+    float pktRssi = radio.getRSSI(true);
+    dfmFrames++;
+    int ok = dfmDecodeFrame(rawD, pol == 1);
+    if (!ok) { dfmBadFrames++; continue; }
+    if (!everGot) {
+      everGot = true;
+      lastKindDfm = true;
+    }
+    lastOk = millis();
+    lastRxMs = lastOk;
+    lastRxFreq = fMHz;
+    dfmLastMs = lastOk;
+    frameCount++;
+    line(36, String("DFM ") + dfmSubtypeShort[dfs.subtype < 9 ? dfs.subtype : 1] + "  ID: " + (dfs.validID ? dfs.id : "????????") + "  Nr: " + dfs.frame, dfs.validID ? ST77XX_GREEN : ST77XX_ORANGE);
+    line(48, String("Frames ") + dfmFrames + " (schlecht " + dfmBadFrames + ") " + (pol ? "inv" : "norm") + " SV " + dp.sats, ST77XX_YELLOW);
+    if (filterOn && dfs.validID && strncmp(dfs.id, filterId, 8) != 0) {      // Sondenfilter: fremde Sonde
+      char m[64];
+      snprintf(m, sizeof(m), "Fremde Sonde %s bei %.3f MHz ignoriert (Filter %s)", dfs.id, fMHz, filterId);
+      logLine(m);
+      foreignF = fMHz;
+      foreignUntil = millis() + FILTER_FOREIGN_BLOCK_MS;
+      dfmRadioMode(false);
+      return false;
+    }
+    if (dp.fresh == 7) {                        // Lat, Lon und Hoehe sind seit der letzten Ausgabe neu
+      dp.fresh = 0;
+      dfmPublish(fMHz, pktRssi);
+      dfmArm(fMHz, pol, true);                  // nach der (laengeren) Kartenzeichnung neu scharf machen
+    }
+  }
+  dfmRadioMode(false);
+  (void)tStart;
+  return everGot;
+}
+
+// Je nach Einstellung SONDE_TYPES (settings.h: 0 nur RS41, 1 RS41 + DFM, 2 nur DFM) die Decoder nacheinander
+// probieren; der zuletzt erfolgreiche zuerst.
+bool trackAny(float f) {
+  uint32_t m = SONDE_TYPES;
+  bool dfmFirst = (m == 2) || (m == 1 && lastKindDfm);
+  for (int pass = 0; pass < 2; pass++) {
+    bool doDfm = (pass == 0) ? dfmFirst : !dfmFirst;
+    if (doDfm && m == 0) continue;
+    if (!doDfm && m == 2) continue;
+    bool r = doDfm ? trackDfm(f) : trackSonde(f);
+    if (r) { lastKindDfm = doDfm; return true; }
+    if (restartRx) return false;
+  }
+  return false;
 }
 
 // Zeigt kurz nach dem Einschalten Rufzeichen, Versionsnummer und Compile-Datum/-Uhrzeit (__DATE__/__TIME__,
@@ -10357,12 +11410,12 @@ void loop() {
   if (fixedFreq) {                                   // feste Frequenz (Menue): kein Suchlauf
     line(12, String("Feste Frequenz ") + String(freqMHz, 3) + " MHz");
     if (!mapMode) drawFixedPanel(radio.getRSSI(false));   // Pegel/Statistik statt leerer Flaeche, siehe drawFixedPanel()
-    trackSonde(freqMHz);
+    trackAny(freqMHz);
     return;
   }
   if (lastRxFreq > 0 && millis() - lastRxMs < STICKY_MS) {   // kuerzlich Sonde gehabt: erst auf ihrer Frequenz
     line(12, String("Lausche weiter ") + String(lastRxFreq, 3) + " MHz (zuletzt empfangene Sonde)");
-    trackSonde(lastRxFreq);
+    trackAny(lastRxFreq);
     return;                                                   // naechste Runde entscheidet neu (weiter sticky, oder Suchlauf)
   }
   line(12, "Grobscan 400-406 MHz ...");
@@ -10397,7 +11450,7 @@ void loop() {
       Serial.printf("Kandidat %d: fremde Sonde (Filter %s) -> uebersprungen\n", c + 1, filterId);
       continue;
     }
-    if (trackSonde(f) || restartRx) return;   // Sonde gefunden und wieder verloren (oder Menue-Aenderung) -> neu beginnen
-    Serial.printf("Kandidat %d: kein RS41-Frame\n", c + 1);
+    if (trackAny(f) || restartRx) return;   // Sonde gefunden und wieder verloren (oder Menue-Aenderung) -> neu beginnen
+    Serial.printf("Kandidat %d: kein Sondenframe (RS41%s)\n", c + 1, SONDE_TYPES ? "/DFM" : "");
   }
 }

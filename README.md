@@ -3,7 +3,7 @@
 Firmware für den [LilyGO T-Deck Plus](https://lilygo.cc/en-us/products/t-deck-plus-1?srsltid=AU7gw4XTKNjTB_l7i5qSKFlh0Ql-kE6qLw8yG6WAu95MsKPBSIrkMjWZ) (ESP32-S3, SX1262-Funkmodul),
 die das Gerät in zwei Betriebsarten verwandelt:
 
-- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (400-406 MHz, FSK) direkt über
+- **Sondenempfang**: empfängt und dekodiert Vaisala-RS41-Wettersonden (433 MHz, FSK) direkt über
   den integrierten SX1262 => Position, Höhe, Steig-/Sinkrate und ID live auf der Karte, inklusive
   Landevorhersage beim Sinken.
 - **LoRa-APRS**: eigenständiger APRS-Tracker/Empfänger auf 433,775 MHz (europäische LoRa-APRS-Konvention),
@@ -15,6 +15,11 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
 
 ## Features
 
+- **DFM-06/09/17 (Graw)** zusätzlich zum RS41 (Version 6.0.0, Einstellung `SONDE_TYPES`: 0 nur RS41, 1 RS41 + DFM, 2 nur DFM). Ungetestet an echter Hardware.
+- **RS41 ohne Frameverlust** (`RS41_ONESYNC`, Standard 1, Menü „RS41-Empfang“): nach Schritt 1 folgt ein zweiter, kurzer Sync im selben Frame auf den Positionsblock; so kommt jeder Frame an (früher nur jeder zweite). 0 = altes Verfahren, bei Misserfolg Rückfall darauf.
+- **Lautstärke** (Menü „Lautstärke“, Taste `+`): 0 bis 100 % für alle Töne.
+- **GPS-Filter** (Menü „GPS-Filter“, Taste `/`, `GPS_FILTER` in der config.ini): Ausreißerfilter für die eigene Position/Höhe ein- oder ausschalten.
+- **Zeiten in der `config.ini`** (Namen auf `_S`): ganze Zahlen und Kommazahlen sind Sekunden (`90`, `3.456`, `3,456`, `.1` = 100 ms), auch mit Einheit (`3.456s`, `3456ms`). Mit Doppelpunkt gilt `[hh]:[mm[:ss[.ttt]]]`: `1:30` = 1 h 30 min, `:30` = 30 min, `:1:30.5` = 1 min 30,5 s. Werte über 60 s schreibt die Firmware als `hh:mm:ss.ttt`. Alte `_MS`-Einträge funktionieren weiter.
 - RS41-Dekodierung inkl. CRC-Prüfung, GPS-Zeit/-Position/-Höhe, Steig-/Sinkrate, Landevorhersage (lokal und
   optional online per Tawhiri/SondeHub-Windvorhersage)
 - Kartenansicht mit mehreren Kartenarten (Rad-/Luftbild-/Topo-/Relief-Kacheln), eigenem Track, Zoom und
@@ -205,3 +210,9 @@ GNU GPLv3, siehe [LICENSE](LICENSE).
 ## Autor
 
 DL6TJ
+
+## Quellen / Danksagung
+
+- **DFM-Dekodierung** (Sync-Muster, Entschachtelung, Hamming-Korrektur, Feldauswertung, ID-/Typerkennung) und die Idee „ein Sync pro RS41-Frame“ stammen aus dem Projekt
+  [rdz_ttgo_sonde](https://github.com/dl9rdz/rdz_ttgo_sonde) von dl9rdz (Hansi Reiser), dort `RX_FSK/src/DFM.cpp`, GPL-2.0-oder-später; rdz verweist seinerseits auf oe5dxl (dxlaprs) und rs1729/RS.
+  Der Code hier ist für SX1262/RadioLib neu geschrieben.

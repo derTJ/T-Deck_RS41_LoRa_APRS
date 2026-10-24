@@ -189,6 +189,11 @@ const float FINE_STEP   = 0.010;        // Feinscan-Schrittweite [MHz]
 const float REL_MARGIN  = 4.0;          // dB ueber dem Median (Rauschen) gilt im Grobscan als Signal
 #define SCAN_SWEEPS 5                   // Grobscan wird gemittelt ueber so viele Durchlaeufe (laenger = empfindlicher)
 const float FINE_MARGIN = 6.0;          // Feinscan: Peak muss so viele dB ueber dem Median liegen, sonst kein Decodierversuch
+static uint32_t RS41_ONESYNC = 1;                       // -- CFG: RS41-Empfang: 0 = altes Zwei-Schritt-Verfahren (Rest im NAECHSTEN Frame, verliert jeden zweiten Frame),
+                                                        // 1 = zweiter kurzer Sync im SELBEN Frame auf den Positionsblock (Standard). Bei Misserfolg faellt 1 automatisch
+                                                        // auf 0 zurueck. Auch im Menue ("RS41-Empfang", Taste *). Idee: dl9rdz/rdz_ttgo_sonde (https://github.com/dl9rdz/rdz_ttgo_sonde).
+static uint32_t SONDE_TYPES = 1;                        // -- CFG: Sondentypen: 0 nur RS41, 1 RS41 + DFM-06/09/17 (Standard), 2 nur DFM. Auch im Menue ("Sondentyp", Taste #).
+                                                        // DFM-Decoder nach https://github.com/dl9rdz/rdz_ttgo_sonde (dl9rdz, GPL-2.0+). UNGETESTET auf dem SX1262.
 #define ACQ_MS   1350                   // Decodierversuch pro Kandidat [ms] (RS41 sendet 1 Frame/s)
 #define LOST_MS  5000                   // so lange ohne Frame, dann zurueck zum Scan [ms]
 #define STICKY_MS (20UL * 1000UL)       // nach einer decodierten Sonde: so lange noch gezielt auf ihrer letzten
@@ -205,6 +210,7 @@ static int FILTER_UNKNOWN_RETRY_N       = 8;         // -- CFG: so viele erfolgl
 // ========================================================================================================
 // GPS-Filter (eigene Position) -- siehe gpsFilterFix()/posJumpOk()/gpsFixGoodEnoughToSend() im .ino
 // ========================================================================================================
+static uint32_t GPS_FILTER = 1;                 // -- CFG: 1 = Ausreisserfilter fuer eigene Position/Hoehe aktiv, 0 = Rohwerte (auch Menue "GPS-Filter")
 static float GPS_MAX_SPEED_MS = 55.0f;         // -- CFG: ~200 km/h + Marge, deckt Auto/Rad/Fuss grosszuegig ab --
                                                        // Obergrenze fuer "plausible" Bewegung zwischen zwei Fixes
 static float GPS_JUMP_MARGIN_M = 50.0f;        // -- CFG: zusaetzliche Toleranz gegen normales GPS-Jittern
@@ -217,6 +223,7 @@ static uint32_t GPS_ALT_GLITCH_TIMEOUT_MS = 120000UL;   // -- CFG: nach 2 Min. a
 static int GPS_SEND_MIN_SATS = 4;              // -- CFG: Mindest-Satellitenzahl, um die eigene Position ueberhaupt
                                                        // zu senden (SondeHub-Listener/LoRa-APRS-Beacon)
 static float GPS_SEND_MAX_HDOP = 2.5f;         // -- CFG: <1 exzellent, 1..2 gut, 2..5 brauchbar, >5 fragwuerdig (Richtwerte)
+static int GPS_SEND_MIN_EPOCHS = 3;            // -- CFG: so viele gute Fixe (Sat/HDOP/Tempo) in Folge noetig, bevor gesendet wird; jedes "kein Fix" setzt zurueck
 #define SAT_MAX 64                 // maximale Anzahl Satelliten im GPS-Radar/der Satellitenliste
 static uint32_t SAT_TIMEOUT_MS = 8000UL;      // -- CFG: Satellit aus der Liste entfernen, wenn so lange keine neuen Daten ($--GSV) kamen
 
