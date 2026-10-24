@@ -1,4 +1,4 @@
-// Version 6.9.0
+// Version 6.9.2
 // T-Deck Plus – RS41 Empfang v2 (SX1262, FSK)
 //
 // ===========================================================================
@@ -637,6 +637,8 @@
 //       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
 //       entsprechend mitgezogen.
 //
+//  - v6.9.2 (Okt. 2026): Batteriesymbol in der Kopfzeile 11 px hoch, mittig zur Schrift (Ursache der Blaesse: drawGps()/Clear der Kopfzeile ueberdeckte die vorher gezeichnete Batterie -> Batterie wird jetzt zuletzt gezeichnet).
+//  - v6.9.1 (Okt. 2026): Batteriesymbol in der Kopfzeile 9 px hoch und mittig zur Schrift (vorher 10 px, wirkte 1 px zu gross/verschoben).
 //  - v6.9.0 (Okt. 2026): Einheitliche Statuszeile in allen grafischen Ansichten (Karte, Hoehentrack/Stationsliste, GPS-Radar): GPS, Uhrzeit,
 //    Datum und Batterie immer an denselben Stellen der obersten Zeile (statt Block rechts oben, der Inhalte ueberdeckte); Titel der Ansichten
 //    stehen links daneben. Bei einem Hinweis (Toast) bleibt nur die Batterie. Taste H im GPS-Radar zeigt eine Erklaerung (Farben, Punkte,
@@ -934,7 +936,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "6.9.0"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "6.9.2"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -3065,20 +3067,24 @@ static void statusBgFill(Adafruit_GFX *g, int x, int y, int w, int h) {
 // Batteriesymbol mit Prozentzahl (oder "USB") und Blitz beim Laden; funktioniert auf Display und Bildpuffer
 static void drawBattery(Adafruit_GFX *g, int x, int y) {
   if (batV <= 0) return;
-  statusBgFill(g, x - 2, y - 1, 322 - x, 13);   // BUG behoben (v4.94): Hoehe war 12 (bis y+10), drawGps() faengt
+  statusBgFill(g, x - 2, y - 1, 322 - x, statusCompactView() ? 11 : 13);   // BUG behoben (v4.94): Hoehe war 12 (bis y+10), drawGps() faengt
                                                  // aber erst bei y+12 an -- Zeile y+11 dazwischen wurde nie
                                                  // geraeumt (irritierende helle Pixelzeile zwischen Batterie und
                                                  // GPS, je nach Kartenuntergrund). Jetzt 13 (bis y+11), luecken-
                                                  // los an drawGps() anschliessend.
-  g->drawRect(x, y, 22, 10, ST77XX_WHITE);
-  g->fillRect(x + 22, y + 3, 2, 4, ST77XX_WHITE);
+  const bool cv = statusCompactView();                  // v6.9.2: Kopfzeile: 11 px hoch, 1 px nach oben, damit die Mitte (y+5) genau auf der
+  const int bh = cv ? 11 : 10;                          // Mitte der 7-px-Schrift (Zeilen y+2..y+8) liegt; Innenflaeche schwarz hinterlegt (kraeftige Farben)
+  if (cv) { y -= 1; }
+  g->drawRect(x, y, 22, bh, ST77XX_WHITE);
+  g->fillRect(x + 22, y + (bh - 4) / 2, 2, 4, ST77XX_WHITE);
   uint16_t col = (batPct < 0) ? ST77XX_CYAN : (batPct > 50 ? ST77XX_GREEN : (batPct > 20 ? ST77XX_YELLOW : ST77XX_RED));
   int w = (batPct < 0) ? 18 : (batPct * 18 + 50) / 100;
-  if (w > 0) g->fillRect(x + 2, y + 2, w, 6, col);
+  if (w > 0) g->fillRect(x + 2, y + 2, w, bh - 4, col);
   if (batChg) {                                        // Blitz
-    g->drawLine(x + 13, y + 2, x + 9, y + 5, ST77XX_WHITE);
-    g->drawLine(x + 9, y + 5, x + 13, y + 5, ST77XX_WHITE);
-    g->drawLine(x + 13, y + 5, x + 9, y + 8, ST77XX_WHITE);
+    int m = y + bh / 2;
+    g->drawLine(x + 13, m - 2, x + 9, m, ST77XX_WHITE);
+    g->drawLine(x + 9, m, x + 13, m, ST77XX_WHITE);
+    g->drawLine(x + 13, m, x + 9, m + 2, ST77XX_WHITE);
   }
   char t[8];
   if ((millis() / 2000) % 2 == 1) {              // Feature (Wunsch Okt. 2026, "Akkukapazitaet im Wechsel (2 sek) mit der
@@ -3090,7 +3096,7 @@ static void drawBattery(Adafruit_GFX *g, int x, int y) {
   }
   g->setTextSize(1);
   g->setTextColor(ST77XX_WHITE);
-  g->setCursor(x + 27, y + 1);
+  g->setCursor(x + 27, cv ? y + 2 : y + 1);
   g->print(t);
 }
 
@@ -3217,14 +3223,15 @@ static void drawHeaderStatus(Adafruit_GFX *g, int x, int y) {
 }
 
 static void drawStatus(Adafruit_GFX *g, int x, int y) {
-  drawBattery(g, x - 8, y);                   // 8 px weiter links als GPS/Uhr, damit die Spannungsanzeige "x.xx" ganz auf den Schirm passt
   if (statusCompactView()) {                  // einheitliche Kopfzeile (siehe oben); bei laufendem Hinweis (Toast) nur die Batterie
     if (!(toastUntil && millis() < toastUntil)) {
       statusBgFill(g, 92, y - 1, 168, 12);
       drawHeaderStatus(g, 96, y + 1);
     }
+    drawBattery(g, x - 8, y);                 // ZULETZT: drawGps() raeumt bis zum rechten Rand (322 - x) und wuerde die Batterie sonst abdunkeln
     return;
   }
+  drawBattery(g, x - 8, y);                   // 8 px weiter links als GPS/Uhr, damit die Spannungsanzeige "x.xx" ganz auf den Schirm passt
   drawGps(g, x, y + 12);
   drawClock(g, x, y + 21);
 }
