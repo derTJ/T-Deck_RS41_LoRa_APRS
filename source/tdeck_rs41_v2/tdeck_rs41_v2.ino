@@ -1,4 +1,4 @@
-// Version 6.7.2
+// Version 6.9.0
 // T-Deck Plus – RS41 Empfang v2 (SX1262, FSK)
 //
 // ===========================================================================
@@ -637,6 +637,23 @@
 //       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
 //       entsprechend mitgezogen.
 //
+//  - v6.9.0 (Okt. 2026): Einheitliche Statuszeile in allen grafischen Ansichten (Karte, Hoehentrack/Stationsliste, GPS-Radar): GPS, Uhrzeit,
+//    Datum und Batterie immer an denselben Stellen der obersten Zeile (statt Block rechts oben, der Inhalte ueberdeckte); Titel der Ansichten
+//    stehen links daneben. Bei einem Hinweis (Toast) bleibt nur die Batterie. Taste H im GPS-Radar zeigt eine Erklaerung (Farben, Punkte,
+//    Kuerzel, Tabellenspalten, HDOP). Textbild und Menue behalten den schmalen Block rechts oben.
+//  - v6.8.5 (Okt. 2026): GPS-Radar wie die Stationsliste: GPS-Status, Uhrzeit und Datum in der Kopfzeile, rechts oben nur die Batterie
+//    (der Statusblock ueberdeckte Tabellenkopf und erste Zeilen); Batterie in allen Ansichten 8 px weiter links, damit die Spannung
+//    "x.xx" nicht mehr am Rand abgeschnitten wird.
+//  - v6.8.4 (Okt. 2026): Stationsliste: Titel "APRS-Stations" (kuerzer), Batterie dort 8 px weiter links -- die abwechselnd gezeigte Spannung
+//    ("4.65") ragte sonst am rechten Rand ab.
+//  - v6.8.3 (Okt. 2026): Stationsliste (LoRa-Modus): Titel nur noch "APRS-Stationen", dadurch passt hinter GPS und Uhrzeit auch das Datum in die Kopfzeile.
+//  - v6.8.2 (Okt. 2026): Empfangsuhrzeit in der Stationsliste (Geraet und Web) bei Stationen, die laenger als 24 h zurueckliegen, mit
+//    Wochentag davor ("Fr 21:40"), sonst mehrdeutig; gemeinsame Funktion aprsRecvClock().
+//  - v6.8.1 (Okt. 2026): Weboberflaeche (Stationsliste, LoRa-Modus): Alter wie am Geraet (mm:ss, ">1h", ">2h", ...) und neue Spalte
+//    "Uhrzeit" mit dem Zeitpunkt des letzten Empfangs (HH:MM, Ortszeit des Geraets).
+//  - v6.8.0 (Okt. 2026): LoRa-Stationsliste: GPS-Status und Uhrzeit stehen in der Kopfzeile (der Statusblock rechts oben zeigt dort nur noch
+//    die Batterie und ueberschreibt keine Listenzeilen mehr); Alter der Stationen als mm:ss bzw. ">1h", ">2h", ... und dahinter die
+//    Uhrzeit des letzten Empfangs (HH:MM); Positionsanzeige "1-9/32" in die zweite Zeile verschoben.
 //  - v6.7.2 (Okt. 2026): Kompilierfehler behoben (unmaskierte Anfuehrungszeichen im Kopfkommentar-Text der config.ini).
 //  - v6.7.1 (Okt. 2026): APRS_MAX_AGE_S darf jetzt bis 72 Stunden betragen (vorher 2 h); ist die Stationsliste voll (APRS_MAX = 32),
 //    wird wie bisher die am laengsten nicht gehoerte Station ersetzt.
@@ -917,7 +934,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "6.7.2"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "6.9.0"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -3173,15 +3190,48 @@ static void drawClock(Adafruit_GFX *g, int x, int y) {
 }
 
 // Statusblock oben rechts: Batterie, GPS und (Feature v4.90) Uhrzeit/Datum
+static char toastText[48] = "";                    // (hier statt weiter unten: drawStatus() braucht toastUntil)
+static uint32_t toastUntil = 0;
+
+// Einheitliche Statuszeile (v6.9.0): in ALLEN grafischen Ansichten (Karte, Hoehentrack/Stationsliste, GPS-Radar) stehen GPS-Status,
+// Uhrzeit, Datum und Batterie in derselben Kopfzeile -- GPS ab x=96, Uhrzeit x=152, Datum x=208, Batterie x=262. Das Textbild
+// (Sondenmodus) und das Menue behalten den schmalen Block rechts oben (dort belegen Textzeilen die Kopfzeile).
+static bool statusCompactView() { return mapMode && !menuOpen; }
+
+// GPS-Status, Uhrzeit (mit Sekunden) und Datum nebeneinander in einer Zeile ab (x, y) -- fuer statusCompactView().
+static void drawHeaderStatus(Adafruit_GFX *g, int x, int y) {
+  drawGps(g, x, y);
+  if (!timeSet) return;
+  char tt[12], dd[12];
+  time_t tn = time(nullptr);
+  struct tm tmn;
+  localtime_r(&tn, &tmn);
+  snprintf(tt, sizeof(tt), "%02d:%02d:%02d", tmn.tm_hour, tmn.tm_min, tmn.tm_sec);
+  snprintf(dd, sizeof(dd), "%02d.%02d.%02d", tmn.tm_mday, tmn.tm_mon + 1, (tmn.tm_year + 1900) % 100);
+  g->setTextSize(1);
+  g->setTextColor(ST77XX_WHITE);
+  g->setCursor(x + 56, y);
+  g->print(tt);
+  g->setCursor(x + 112, y);
+  g->print(dd);
+}
+
 static void drawStatus(Adafruit_GFX *g, int x, int y) {
-  drawBattery(g, x, y);
+  drawBattery(g, x - 8, y);                   // 8 px weiter links als GPS/Uhr, damit die Spannungsanzeige "x.xx" ganz auf den Schirm passt
+  if (statusCompactView()) {                  // einheitliche Kopfzeile (siehe oben); bei laufendem Hinweis (Toast) nur die Batterie
+    if (!(toastUntil && millis() < toastUntil)) {
+      statusBgFill(g, 92, y - 1, 168, 12);
+      drawHeaderStatus(g, 96, y + 1);
+    }
+    return;
+  }
   drawGps(g, x, y + 12);
   drawClock(g, x, y + 21);
 }
 
 static void statusRefresh() {                          // Statusblock im Bildpuffer neu zeichnen und aufs Display kopieren
   drawStatus(scr(), 270, 1);
-  scrFlush(268, 0, 52, 40);   // Feature v4.94: x/Breite an den um 1 Zeichen nach rechts verschobenen Statusblock
+  scrFlush(258, 0, 62, 40);   // Feature v4.94: x/Breite an den um 1 Zeichen nach rechts verschobenen Statusblock
                               // angepasst (vorher 262,58 fuer x=264, jetzt x=270). Hoehe (v4.90/v4.92) deckt die
                               // zweizeilige Uhrzeit/Datum-Anzeige unter GPS ab
 }
@@ -3238,8 +3288,6 @@ static void batteryLogTick() {
 }
 
 // Hinweis am Bildschirm (Toast) fuer kurze Rueckmeldungen
-static char toastText[48] = "";
-static uint32_t toastUntil = 0;
 static void drawToast(GFXcanvas16 *c) {
   if (!toastUntil || millis() >= toastUntil) return;
   c->fillRect(0, 0, 262, 12, ST77XX_BLACK);
@@ -4257,14 +4305,27 @@ static void mapUpdate() {
 // seit dem Fund der aktuellen Sonde, siehe altTrackAdd()), im LoRa-Modus stattdessen die Liste der
 // gehoerten APRS-Stationen mit Entfernung und "zuletzt gehoert". Dieselbe Weboberflaeche-Logik (gleiches
 // Aktualisierungsintervall wie das Live-Bild) spiegelt das auf der Menueseite, siehe webAltPanel().
+// Uhrzeit des letzten Empfangs einer Station (Ortszeit) = jetzt minus Alter: "HH:MM", bei mehr als 24 h Alter mit
+// Wochentag davor ("Fr 21:40"), damit die Zeit eindeutig bleibt (v6.8.2). Leerer Text, solange die Uhr nicht gesetzt ist.
+static void aprsRecvClock(uint32_t ageS, char *b, size_t n) {
+  b[0] = 0;
+  if (!timeSet) return;
+  static const char *const wd[7] = {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
+  time_t tr = time(nullptr) - (time_t)ageS;
+  struct tm tmr;
+  localtime_r(&tr, &tmr);
+  if (ageS >= 86400UL) snprintf(b, n, "%s %02d:%02d", wd[tmr.tm_wday % 7], tmr.tm_hour, tmr.tm_min);
+  else snprintf(b, n, "%02d:%02d", tmr.tm_hour, tmr.tm_min);
+}
+
 static void altTrackUpdate() {
   if (!frameCanvas) return;
   frameCanvas->fillScreen(ST77XX_BLACK);
   frameCanvas->setTextSize(1);
   if (radioMode == 1) {                              // LoRa-APRS: Stationsliste statt Hoehentrack
     frameCanvas->setTextColor(ST77XX_CYAN);
-    frameCanvas->setCursor(4, 4);
-    frameCanvas->print("LoRa-APRS-Stationen");
+    frameCanvas->setCursor(4, 2);
+    frameCanvas->print("APRS-Stations");                     // kuerzer als "LoRa-APRS-Stationen": mehr Platz fuer GPS/Uhrzeit/Datum
     frameCanvas->setTextColor(COL_RADAR_TEXT);              // Rohempfangs-Diagnose: zeigt auch an, wenn ueberhaupt
     frameCanvas->setCursor(4, 14);                           // Pakete ankommen, aber keine Station daraus wird
     if (aprsRxTotal == 0) {
@@ -4311,7 +4372,7 @@ static void altTrackUpdate() {
         char posb[16];
         snprintf(posb, sizeof(posb), "%d-%d/%d", aprsListScroll + 1, min(aprsListScroll + rowsVisible, aprsN), aprsN);
         frameCanvas->setTextColor(COL_RADAR_TEXT);
-        frameCanvas->setCursor(260, 4);
+        frameCanvas->setCursor(266, 14);                     // zweite Zeile rechts (oben rechts sitzt die Batterie)
         frameCanvas->print(posb);
       }
       int y = listTop;
@@ -4320,7 +4381,10 @@ static void altTrackUpdate() {
         uint32_t ageS = (millis() - aprsSeenMs[i]) / 1000;
         char ageb[16];
         if (ageS < 3600) snprintf(ageb, sizeof(ageb), "%lu:%02lu", (unsigned long)(ageS / 60), (unsigned long)(ageS % 60));
-        else snprintf(ageb, sizeof(ageb), "%luh", (unsigned long)(ageS / 3600));
+        else snprintf(ageb, sizeof(ageb), ">%luh", (unsigned long)(ageS / 3600));    // ab 1 h: ">1h", ">2h", ...
+        char clk[12];                                       // Uhrzeit des letzten Empfangs (Ortszeit), wenn die Uhr stimmt
+        aprsRecvClock(ageS, clk + 1, sizeof(clk) - 1);
+        clk[0] = clk[1] ? ' ' : 0;
         double d = haversineKm(hLat, hLon, aprsLat[i], aprsLon[i]);
         // Pegel/SNR vor die Zeit gesetzt (Wunsch Okt. 2026); "vor" wird weggelassen, wenn die Zeile mit allen
         // Feldern sonst zu lang fuer die Zeile wuerde (Bildschirm 320px breit, Textgroesse 1 = 6px/Zeichen,
@@ -4328,10 +4392,7 @@ static void altTrackUpdate() {
         // in der ueberwiegenden Zahl der Faelle noch nicht ueberschrieben wird.
         char ln[64];
         const int MAXLN = 38;
-        snprintf(ln, sizeof(ln), "%-9s %6.1f km %4.0fdBm %4.1fdB vor %s", aprsCall[i], d, aprsRssi[i], aprsSnr[i], ageb);
-        if ((int)strlen(ln) > MAXLN) {
-          snprintf(ln, sizeof(ln), "%-9s %6.1f km %4.0fdBm %4.1fdB %s", aprsCall[i], d, aprsRssi[i], aprsSnr[i], ageb);
-        }
+        snprintf(ln, sizeof(ln), "%-9s %6.1f km %4.0fdBm %4.1fdB %-5s%s", aprsCall[i], d, aprsRssi[i], aprsSnr[i], ageb, clk);   // v6.8.0: Alter + Uhrzeit
         bool sel = (i == aprsListSel);                // per Trackball markierte Station (siehe aprsListMoveSel())
         if (sel) frameCanvas->fillRect(0, y - 2, 320, 11, COL_RADAR_RING);
         // Herkunft des Pakets vorangestellt, wie auf der Karte farblich unterschieden (aprsRecvKind[], siehe
@@ -4385,7 +4446,7 @@ static void altTrackUpdate() {
     }
   } else {                                           // Sondenmodus: Hoehe ueber der Zeit
     frameCanvas->setTextColor(ST77XX_CYAN);
-    frameCanvas->setCursor(4, 4);
+    frameCanvas->setCursor(4, 2);
     frameCanvas->print("Hoehentrack");
     if (!altTrackAlt) {
       frameCanvas->setTextColor(COL_RADAR_TEXT);
@@ -4490,7 +4551,7 @@ static void satRadarUpdate() {
   frameCanvas->fillScreen(ST77XX_BLACK);
   frameCanvas->setTextSize(1);
   frameCanvas->setTextColor(ST77XX_CYAN);
-  frameCanvas->setCursor(4, 4);
+  frameCanvas->setCursor(4, 2);
   frameCanvas->print("GPS-Radar");
   frameCanvas->setTextColor(COL_RADAR_TEXT);
   char hdr[48];
@@ -8297,12 +8358,12 @@ static void webMenu() {
                      // Jede Zeile klickbar (siehe CSS #altlist tbody tr oben): oeffnet showStationPopup() mit
                      // demselben Info-Text wie das Popup am Geraet (aprsComment[]/"R"-Taste in der Liste).
                      "else{var kc={D:'#0000ff',R:'#ff8e00',I:'#ff0000'};"
-                     "h+='<table><tr><th></th><th>Rufzeichen</th><th>km</th><th>dBm</th><th>SNR</th><th>zuletzt</th></tr>';"
+                     "h+='<table><tr><th></th><th>Rufzeichen</th><th>km</th><th>dBm</th><th>SNR</th><th>zuletzt</th><th>Uhrzeit</th></tr>';"
                      "d.st.forEach(function(s,k){var a=s.age,as=a<3600?"
-                     "(Math.floor(a/60)+':'+String(a%60).padStart(2,'0')):(Math.floor(a/3600)+'h');"
+                     "(Math.floor(a/60)+':'+String(a%60).padStart(2,'0')):('>'+Math.floor(a/3600)+'h');"
                      "h+='<tr onclick=\"showStationPopup('+k+')\">"
                      "<td style=\"color:'+(kc[s.k]||kc.D)+';font-weight:bold\">'+s.k+'</td><td>'+s.c+'</td>"
-                     "<td>'+s.km.toFixed(1)+'</td><td>'+s.rssi+'</td><td>'+s.snr+'</td><td>'+as+'</td></tr>';});"
+                     "<td>'+s.km.toFixed(1)+'</td><td>'+s.rssi+'</td><td>'+s.snr+'</td><td>'+as+'</td><td>'+(s.t||'')+'</td></tr>';});"
                      "h+='</table>';}"
                      "lst.innerHTML=h;"
                      "}else{"
@@ -8477,6 +8538,8 @@ static void webAltStat() {
       int i = idx[k];
       double d = haversineKm(hLat, hLon, aprsLat[i], aprsLon[i]);
       uint32_t ageS = (millis() - aprsSeenMs[i]) / 1000;
+      char clkb[12];                                        // Uhrzeit des letzten Empfangs (Ortszeit des Geraets), wie in der Geraeteliste
+      aprsRecvClock(ageS, clkb, sizeof(clkb));
       // Herkunftskennung D/R/I wie in der Geraete-Liste (altTrackUpdate(), siehe COL_APRS_*) sowie die seit
       // v4.70 pro Station erfassten Pegel/SNR-Werte (aprsRssi[]/aprsSnr[]) -- damit die Webtabelle unten
       // (loadAlt()) optisch dasselbe zeigen kann wie die Geraete-Ansicht, inkl. Farbe.
@@ -8487,7 +8550,7 @@ static void webAltStat() {
       char eTxt[APRS_COMMENT_LEN * 2];
       jsonEsc(aprsComment[i], eTxt, sizeof(eTxt));
       if (k) j += ",";
-      j += "{\"i\":" + String(i) + ",\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) +
+      j += "{\"i\":" + String(i) + ",\"c\":\"" + String(aprsCall[i]) + "\",\"km\":" + String(d, 1) + ",\"age\":" + String((unsigned long)ageS) + ",\"t\":\"" + String(clkb) + "\"" +
            ",\"k\":\"" + String(kindTag) + "\",\"rssi\":" + String(aprsRssi[i], 0) + ",\"snr\":" + String(aprsSnr[i], 1) +
            ",\"txt\":\"" + String(eTxt) + "\"}";
     }
@@ -8954,9 +9017,57 @@ static void drawHelpScreen() {
   tft.print("Beliebige Taste/Klick: zurueck zur Karte");
 }
 
-// Blockiert, bis eine beliebige Taste oder ein Trackball-Klick kommt, dann zurueck zur Karte (showView()).
-static void showHelpScreen() {
-  drawHelpScreen();
+// Erklaerung der GPS-Radar-Ansicht (Taste H dort): Farben, Punkte, Kuerzel und Tabellenspalten. Schreibt wie drawHelpScreen() direkt aufs Display.
+static void drawRadarHelpScreen() {
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_CYAN);
+  tft.setCursor(4, 2);
+  tft.print("Hilfe -- GPS-Radar");
+  int y = 14;
+  struct { uint16_t c; const char *t; } cons[] = {
+    {ST77XX_GREEN, "GP.. GPS (USA)"}, {ST77XX_ORANGE, "GL.. GLONASS (Russland)"}, {ST77XX_CYAN, "GA.. Galileo (EU)"},
+    {ST77XX_MAGENTA, "GB.. BeiDou (China)"}, {ST77XX_YELLOW, "GQ.. QZSS (Japan)"}, {ST77XX_RED, "GI.. NavIC (Indien)"},
+  };
+  for (size_t i = 0; i < sizeof(cons) / sizeof(cons[0]); i++) {
+    tft.setTextColor(cons[i].c);
+    tft.setCursor(4 + (i % 2) * 160, y + (i / 2) * 10);
+    tft.print(cons[i].t);
+  }
+  y += 34;
+  tft.setTextColor(ST77XX_WHITE);
+  const char *rows[] = {
+    "Voller Punkt: Satellit wird empfangen (SNR > 0)",
+    "Kreis: laut Almanach sichtbar, aber (noch) nicht",
+    "   empfangen (Abschattung/Mehrwege)",
+    "Mitte = Zenit, Ringe 60/30 Grad, Rand = Horizont",
+    "N oben, W links, O rechts, S unten",
+    "",
+    "Tabelle: PRN = Konstellation + Nummer (GA13 =",
+    "   Galileo 13), Elv = Hoehe ueber Horizont in Grad,",
+    "   Az = Richtung in Grad (0 N, 90 O, 180 S, 270 W),",
+    "   SNR = Signalstaerke in dB-Hz (0 = kein Empfang)",
+    "-1 bei Elv/Az: Position (noch) unbekannt, kein Punkt",
+    "+N weitere: Liste zu lang, nicht alle sichtbar",
+    "",
+    "Zeile 2: Fix ja/nein, genutzte Satelliten, HDOP",
+    "   (<2 gut, >5 schlecht), sicht = sichtbare Sat.",
+    "Kopfzeile: GPS gruen = Fix, gelb = kein Fix, rot =",
+    "   keine Daten; Zahl = genutzte Sat.; W = WLAN an",
+  };
+  for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+    tft.setCursor(4, y);
+    tft.print(rows[i]);
+    y += 10;
+  }
+  tft.setTextColor(0x8410);
+  tft.setCursor(4, 230);
+  tft.print("Beliebige Taste/Klick: zurueck");
+}
+
+// Blockiert, bis eine beliebige Taste oder ein Trackball-Klick kommt, dann zurueck zur Ansicht (showView()).
+static void showHelpScreen(bool radar = false) {
+  if (radar) drawRadarHelpScreen(); else drawHelpScreen();
   while (true) {
     gpsPoll();
     int e = pollInput();
@@ -9288,6 +9399,10 @@ static void handleInput() {
   }
   if (c == 'h' && mapMode && gfxView == 0) {      // Kurzreferenz der Kartentasten (frueher Helligkeit, siehe Taste Y)
     showHelpScreen();
+    return;
+  }
+  if (c == 'h' && mapMode && gfxView == 2) {      // GPS-Radar: Erklaerung der Farben/Kuerzel/Spalten (v6.9.0)
+    showHelpScreen(true);
     return;
   }
   // Fix v4.87: der bisherige Fallback hier ("sonst: Buchstabe oeffnet das Menue, Punkt ist schon gewaehlt")
