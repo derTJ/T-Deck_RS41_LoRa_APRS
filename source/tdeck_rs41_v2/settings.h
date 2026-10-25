@@ -307,8 +307,9 @@ const float APRS_FREQ_MHZ = 433.775;   // Sendefrequenz des eigenen LoRa-APRS-Be
 const float APRS_BW_KHZ   = 125.0;     // Bandbreite des LoRa-APRS-Kanals (ebenfalls Funkprotokoll-Parameter)
 
 #define APRS_MAX 32                 // max. gleichzeitig verwaltete Stationen
-#define APRS_TRAIL_MAX 40           // max. Punkte je Stationsspur
-#define APRS_TRAIL_KM 5.0f          // (siehe Verwendung im .ino)
+#define APRS_TRAIL_CAP 80           // Speicherkapazitaet je Stationsspur [Punkte] = Obergrenze fuer APRS_TRAIL_MAX
+static uint32_t APRS_TRAIL_MAX = 40;   // -- CFG: max. Punkte je Stationsspur auf der Karte (2 bis APRS_TRAIL_CAP)
+static float APRS_TRAIL_KM = 5.0f;     // -- CFG: Spur auf diese Gesamtlaenge [km] kuerzen (aelteste Punkte fallen vorn weg)
 static uint32_t APRS_MAX_AGE_MS = (30UL * 60UL * 1000UL);   // -- CFG: Station komplett aus der Liste entfernen, wenn
                                      // laenger nichts mehr kam
 #define APRS_COMMENT_LEN 120        // max. Laenge der Zusatzinfo/des Kommentars je Station

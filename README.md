@@ -31,9 +31,9 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
   Symbol-Wechsel nach Tempo (Stationär/Fußgänger/Fahrrad/Bus), Digipeating
 - Sondenfund-Meldung per SondeHub-API (inkl. Freitext-Fundbericht), automatische Weiterleitung zu
   radiosondy.info
-- GPX-Aufzeichnung (eigene Position + Sonde), Screenshots mit EXIF-Koordinaten, SD-Kartenlog mit
+- GPX-Aufzeichnung (eigene Position, Sonde und gehörte LoRa-APRS-Stationen als `<Rufzeichen>.gpx`, fortgesetzt bei erneutem Empfang), Screenshots mit EXIF-Koordinaten, SD-Kartenlog mit
   GPS-/Akku-Diagnosedaten
-- Weboberfläche: Live-Bild des Displays, vollständige Fernsteuerung aller Menüpunkte, Screenshot-/Log-Download
+- Weboberfläche: Live-Bild des Displays (Karte per Maus/Finger ziehen, Mausrad zoomt), vollständige Fernsteuerung aller Menüpunkte, Screenshot-/Log-Download
 - Firmware-Update per WLAN (ArduinoOTA) ohne USB-Kabel, sobald einmal per USB geflasht
 
 ## Hardware

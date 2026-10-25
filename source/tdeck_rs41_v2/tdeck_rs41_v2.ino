@@ -1,4 +1,4 @@
-// Version 6.9.2
+// Version 6.11.0
 // T-Deck Plus – RS41 Empfang v2 (SX1262, FSK)
 //
 // ===========================================================================
@@ -637,6 +637,12 @@
 //       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
 //       entsprechend mitgezogen.
 //
+//  - v6.11.0 (Okt. 2026): Weboberflaeche (/menu): Karte auf dem Live-Bild per Maus/Finger ziehen (verschiebt die Karte am Geraet), Mausrad bzw.
+//    Knoepfe "Zoom +/-" zoomen; neue Aufrufe /vpan und /vzoom, nur in der Kartenansicht wirksam. settings.h unveraendert.
+//  - v6.10.1 (Okt. 2026): Laenge der Stationsspuren auf der Karte per config.ini einstellbar: APRS_TRAIL_MAX (Punkte, 2..80) und APRS_TRAIL_KM (km). settings.h
+//    gleichzeitig ersetzen (APRS_TRAIL_CAP = 80 Punkte Speicherkapazitaet je Station).
+//  - v6.10.0 (Okt. 2026): GPX-Spuren der gehoerten LoRa-APRS-Stationen: je Station <Rufzeichen>.gpx im GPX-Ordner (ohne SSID "-0"), wird bei erneutem
+//    Empfang fortgesetzt, nach dem Loeschen neu angelegt; Punkte nur bei mehr als 10 m Positionsaenderung; am GPX-Schalter (Menue J) gekoppelt.
 //  - v6.9.2 (Okt. 2026): Batteriesymbol in der Kopfzeile 11 px hoch, mittig zur Schrift (Ursache der Blaesse: drawGps()/Clear der Kopfzeile ueberdeckte die vorher gezeichnete Batterie -> Batterie wird jetzt zuletzt gezeichnet).
 //  - v6.9.1 (Okt. 2026): Batteriesymbol in der Kopfzeile 9 px hoch und mittig zur Schrift (vorher 10 px, wirkte 1 px zu gross/verschoben).
 //  - v6.9.0 (Okt. 2026): Einheitliche Statuszeile in allen grafischen Ansichten (Karte, Hoehentrack/Stationsliste, GPS-Radar): GPS, Uhrzeit,
@@ -936,7 +942,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "6.9.2"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "6.11.0"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -2470,7 +2476,7 @@ static float aprsRssi[APRS_MAX], aprsSnr[APRS_MAX];   // Pegel/SNR der zuletzt E
                                                         // relayenden iGates, nicht der Ursprungsstation, dieselbe
                                                         // Einschraenkung wie beim echten APRS-IS/RF-Uebergang.
 static uint32_t aprsSeenMs[APRS_MAX];
-static float aprsTrailLat[APRS_MAX][APRS_TRAIL_MAX], aprsTrailLon[APRS_MAX][APRS_TRAIL_MAX];
+static float aprsTrailLat[APRS_MAX][APRS_TRAIL_CAP], aprsTrailLon[APRS_MAX][APRS_TRAIL_CAP];
 static int aprsTrailN[APRS_MAX];
 static int aprsN = 0;
 // Empfangsart der letzten Meldung je Station -- Grundlage sowohl fuer die Punktfarbe auf der Karte
@@ -2513,13 +2519,13 @@ static void aprsTrailAdd(int s, double lat, double lon) {
   float *tl = aprsTrailLat[s], *tn = aprsTrailLon[s];
   int n = aprsTrailN[s];
   if (n > 0 && haversineKm(tl[n - 1], tn[n - 1], lat, lon) * 1000.0 < 20.0) return;
-  if (n >= APRS_TRAIL_MAX) { for (int i = 1; i < n; i++) { tl[i - 1] = tl[i]; tn[i - 1] = tn[i]; } n--; }
+  if (n >= (int)APRS_TRAIL_MAX) { for (int i = 1; i < n; i++) { tl[i - 1] = tl[i]; tn[i - 1] = tn[i]; } n--; }
   tl[n] = (float)lat; tn[n] = (float)lon; n++;
   double sum = 0.0;
   int from = n - 1;
   while (from > 0) {
     sum += haversineKm(tl[from - 1], tn[from - 1], tl[from], tn[from]);
-    if (sum >= APRS_TRAIL_KM) break;
+    if (sum >= (double)APRS_TRAIL_KM) break;
     from--;
   }
   if (from > 0) {
@@ -2845,15 +2851,132 @@ static void gpxDrain(GpxTrack &t, GpxPoint *buf, int &count, const char *idStr, 
   count = 0;
 }
 
+// ---------- GPX-Spuren der gehoerten LoRa-APRS-Stationen (v6.10.0) ----------
+// Je Station eine Datei <Rufzeichen>.gpx (Grossbuchstaben; ohne SSID wird "-0" angehaengt, deshalb enthaelt der Name immer ein '-' und
+// wird von der Sonden-Auswahl (Fundort) uebersprungen). Existiert die Datei schon (auch nach einem Neustart), werden die Punkte an das
+// letzte <trkseg> angehaengt; loescht man sie, wird sie beim naechsten Empfang neu angelegt. Gleiche Position (innerhalb
+// GPX_ST_MIN_DIST_M zum zuletzt gespeicherten Punkt) wird nicht erneut geschrieben. Gekoppelt an den GPX-Schalter (Menue J).
+// Gepuffert im PSRAM und gemeinsam mit den anderen Spuren geschrieben (gpxDrainAll()/gpxTick()); nur Positionspakete, keine Objekte
+// (Objektnamen koennen Sonden-IDs sein und wuerden mit den Sonden-Dateien kollidieren).
+static const float GPX_ST_MIN_DIST_M = 10.0f;
+struct GpxStPoint { char call[16]; float lat, lon; time_t t; uint16_t ms; };
+struct GpxStLast { char call[16]; float lat, lon; };
+static GpxStPoint *gpxBufSt = nullptr;
+static int gpxCountSt = 0;
+static GpxStLast gpxStLast[APRS_MAX];
+static int gpxStLastN = 0, gpxStLastRR = 0;
+
+static bool gpxStFileName(const char *call, char *out, size_t n) {
+  size_t k = 0; bool dash = false;
+  if (!call || n < 14) return false;
+  for (size_t i = 0; call[i] && k < 10; i++) {
+    char c = call[i];
+    if (c >= 'a' && c <= 'z') c -= 32;
+    if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) out[k++] = c;
+    else if (c == '-') { out[k++] = '-'; dash = true; }
+    else return false;
+  }
+  if (k == 0) return false;
+  if (!dash) { out[k++] = '-'; out[k++] = '0'; }
+  out[k] = 0;
+  return true;
+}
+
+static void gpxStDrain() {
+  if (gpxCountSt <= 0 || !gpxBufSt) { gpxCountSt = 0; return; }
+  for (int i = 0; i < gpxCountSt; i++) {
+    if (!gpxBufSt[i].call[0]) continue;
+    char fn[16];
+    strncpy(fn, gpxBufSt[i].call, sizeof(fn) - 1); fn[sizeof(fn) - 1] = 0;
+    char path[56];
+    snprintf(path, sizeof(path), "%s/%s.gpx", GPX_DIR, fn);
+    if (!SD.exists(path)) {
+      File nf = SD.open(path, FILE_WRITE);
+      if (nf) {
+        char skel[224];
+        int n = snprintf(skel, sizeof(skel),
+          "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"T-Deck RS41\" "
+          "xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>%s</name>\n<trkseg>\n</trkseg>\n</trk>\n</gpx>\n", fn);
+        nf.write((const uint8_t *)skel, n);
+        nf.close();
+        touchFileTime(path);
+      }
+    }
+    File f = SD.open(path, "r+");
+    if (f) {
+      uint32_t sz = f.size();
+      uint32_t back = (sz > 300) ? sz - 300 : 0;
+      f.seek(back);
+      char buf[310];
+      int rn = f.read((uint8_t *)buf, sz - back);
+      char *m = nullptr;
+      if (rn > 0) {
+        buf[rn] = 0;
+        char *m2 = buf;
+        while ((m2 = strstr(m2, "</trkseg>")) != nullptr) { m = m2; m2++; }
+      }
+      if (m) {
+        f.seek(back + (uint32_t)(m - buf));
+        for (int j = i; j < gpxCountSt; j++) {
+          if (strcmp(gpxBufSt[j].call, fn) != 0) continue;
+          char tstr[28], line[160];
+          gpxTimeStr(gpxBufSt[j].t, gpxBufSt[j].ms, tstr, sizeof(tstr));
+          int n = tstr[0]
+            ? snprintf(line, sizeof(line), "  <trkpt lat=\"%.6f\" lon=\"%.6f\"><time>%s</time></trkpt>\n", gpxBufSt[j].lat, gpxBufSt[j].lon, tstr)
+            : snprintf(line, sizeof(line), "  <trkpt lat=\"%.6f\" lon=\"%.6f\"></trkpt>\n", gpxBufSt[j].lat, gpxBufSt[j].lon);
+          if (n > 0) f.write((const uint8_t *)line, n);
+        }
+        static const char tail[] = "</trkseg>\n</trk>\n</gpx>\n";
+        f.write((const uint8_t *)tail, sizeof(tail) - 1);
+        f.flush();
+      }
+      f.close();
+    }
+    for (int j = i; j < gpxCountSt; j++) if (strcmp(gpxBufSt[j].call, fn) == 0) gpxBufSt[j].call[0] = 0;   // erledigt (auch bei Fehler, kein Haengenbleiben)
+  }
+  gpxCountSt = 0;
+}
+
+static void gpxStationQueue(const char *call, double lat, double lon) {
+  if (!gpxOn || !gpxBufSt) return;
+  char fn[16];
+  if (!gpxStFileName(call, fn, sizeof(fn))) return;
+  int li = -1;
+  for (int i = 0; i < gpxStLastN; i++) if (!strcmp(gpxStLast[i].call, fn)) { li = i; break; }
+  bool far = true;
+  if (li >= 0) {
+    float dy = (float)(lat - gpxStLast[li].lat) * 111320.0f;
+    float dx = (float)(lon - gpxStLast[li].lon) * 111320.0f * cosf((float)lat * 0.0174533f);
+    far = (dx * dx + dy * dy) > GPX_ST_MIN_DIST_M * GPX_ST_MIN_DIST_M;
+  }
+  if (!far) {                                           // gleiche Position: nur schreiben, wenn die Datei fehlt (geloescht) und nichts ansteht
+    for (int i = 0; i < gpxCountSt; i++) if (!strcmp(gpxBufSt[i].call, fn)) return;
+    char path[56];
+    snprintf(path, sizeof(path), "%s/%s.gpx", GPX_DIR, fn);
+    if (SD.exists(path)) return;
+  }
+  if (li < 0) li = (gpxStLastN < APRS_MAX) ? gpxStLastN++ : (gpxStLastRR++ % APRS_MAX);
+  strncpy(gpxStLast[li].call, fn, sizeof(gpxStLast[li].call) - 1); gpxStLast[li].call[sizeof(gpxStLast[li].call) - 1] = 0;
+  gpxStLast[li].lat = (float)lat; gpxStLast[li].lon = (float)lon;
+  if (gpxCountSt >= GPX_BUF_CAP) gpxStDrain();
+  GpxStPoint &p = gpxBufSt[gpxCountSt++];
+  strncpy(p.call, fn, sizeof(p.call) - 1); p.call[sizeof(p.call) - 1] = 0;
+  p.lat = (float)lat; p.lon = (float)lon;
+  if (timeSet) { struct timeval tv; gettimeofday(&tv, nullptr); p.t = tv.tv_sec; p.ms = (uint16_t)(tv.tv_usec / 1000); }
+  else { p.t = 0; p.ms = 0; }
+}
+
 static void gpxDrainAll() {
   gpxDrain(gpxIch, gpxBufIch, gpxCountIch, gpxIchId, gpxIchName);
   gpxDrain(gpxSonde, gpxBufSonde, gpxCountSonde, gpxSondeId, gpxSondeName);
+  gpxStDrain();
 }
 
 // Periodischer Push (alle GPX_FLUSH_MS) sowie Sofort-Push, sobald ein Puffer voll ist.
 static void gpxTick() {
   if (gpxCountIch >= GPX_BUF_CAP) gpxDrain(gpxIch, gpxBufIch, gpxCountIch, gpxIchId, gpxIchName);
   if (gpxCountSonde >= GPX_BUF_CAP) gpxDrain(gpxSonde, gpxBufSonde, gpxCountSonde, gpxSondeId, gpxSondeName);
+  if (gpxCountSt >= GPX_BUF_CAP) gpxStDrain();
   if (millis() - gpxLastFlushMs >= GPX_FLUSH_MS) {
     gpxLastFlushMs = millis();
     gpxDrainAll();
@@ -5096,6 +5219,8 @@ static const CfgEntry CFG_REGISTRY[] = {
   { "GPX_RESUME_ASK_S", CFG_SEC, &GPX_RESUME_ASK_S, 0, 172800 },
   { "GPX_RESUME_ASK_TIMEOUT_S", CFG_MS, &GPX_RESUME_ASK_MS, 1000, 120000 },
   { "GPX_FLUSH_S", CFG_MS, &GPX_FLUSH_MS, 1000, 300000 },
+  { "APRS_TRAIL_MAX", CFG_U32, &APRS_TRAIL_MAX, 2, APRS_TRAIL_CAP },
+  { "APRS_TRAIL_KM", CFG_FLOAT, &APRS_TRAIL_KM, 0.1, 500.0 },
   { "APRS_MAX_AGE_S", CFG_MS, &APRS_MAX_AGE_MS, 0, 259200000 },
   { "OWN_SPEED_BIG_KMH", CFG_FLOAT, &OWN_SPEED_BIG_KMH, 0.0, 200.0 },
   { "APRS_BEACON_SLOW_S", CFG_MS, &APRS_BEACON_SLOW_MS, 1000, 3600000 },
@@ -6559,6 +6684,8 @@ static void webMenuSelect();
 static void webLive();
 static void webViewSpace();
 static void webViewFocus();
+static void webViewPan();
+static void webViewZoom();
 static void webViewSendPos();
 static void webViewStatFocus();
 static void webMenuStat();
@@ -6597,6 +6724,8 @@ static void wifiServerStart() {
     server.on("/live.jpg", webLive);
     server.on("/vspace", webViewSpace);
     server.on("/vfocus", webViewFocus);
+    server.on("/vpan", webViewPan);
+    server.on("/vzoom", webViewZoom);
     server.on("/vsendpos", webViewSendPos);
     server.on("/vstatfocus", webViewStatFocus);
     server.on("/mstat", webMenuStat);
@@ -8254,7 +8383,7 @@ static void webMenu() {
                      "max-width:760px;background:#000;color:#fff}"
                      "table{border-collapse:collapse;width:100%}a{color:#6cf}"
                      "td{padding:4px 8px;border-bottom:1px solid #444;vertical-align:middle;text-align:left}"
-                     "img{max-width:100%;border:1px solid #444;image-rendering:pixelated}"
+                     "img{max-width:100%;border:1px solid #444;image-rendering:pixelated}#live{touch-action:none;cursor:grab}"
                      ".b{display:inline-block;padding:3px 10px;margin:1px;border:1px solid #6cf;border-radius:4px;"
                      "text-decoration:none;font-size:16px}"
                      "input[type=text],select{width:auto;max-width:120px;text-align:left}form{display:inline}"
@@ -8306,7 +8435,9 @@ static void webMenu() {
                      "<a href=\"/cfg\">Einstellungen (config.ini)</a></p>"
                      "<p><a class=b href=\"/vspace\">Ansicht wechseln (Space)</a> "
                      "<a class=b href=\"/vfocus\">Zentrieren/Fokus (R)</a> "
-                     "<a class=b href=\"/vsendpos\">Eigene Position senden</a></p>") +
+                     "<a class=b href=\"/vsendpos\">Eigene Position senden</a> "
+                     "<a class=b href=\"#\" onclick=\"webNav('/vzoom?d=1');return false;\">Zoom +</a> "
+                     "<a class=b href=\"#\" onclick=\"webNav('/vzoom?d=-1');return false;\">Zoom &minus;</a></p>") +
                      pmNotice +
                      String(
                      // Stationspopup-Markup (siehe CSS oben/JS unten): leer bis showStationPopup() es befuellt
@@ -8336,6 +8467,14 @@ static void webMenu() {
                      "<script>"
                      "var refTimer=null,lastSeq=null,lastSt=[];"
                      "function loadLive(){document.getElementById('live').src='/live.jpg?t='+Date.now();}"
+                     // Karte auf dem Live-Bild ziehen (Maus/Finger) und mit dem Mausrad zoomen (nur in der Kartenansicht wirksam, siehe webViewPan()).
+                     // Das Neuzeichnen am Geraet dauert etwas, deshalb das Bild nach 1,5 s und 4 s nachladen.
+                     "function webNav(u){fetch(u).then(function(){setTimeout(loadLive,1500);setTimeout(loadLive,4000);});}"
+                     "(function(){var im=document.getElementById('live'),sx=0,sy=0,dn=false;"
+                     "im.addEventListener('pointerdown',function(e){dn=true;sx=e.clientX;sy=e.clientY;im.setPointerCapture(e.pointerId);e.preventDefault();});"
+                     "im.addEventListener('pointerup',function(e){if(!dn)return;dn=false;var k=320/im.clientWidth,dx=Math.round((e.clientX-sx)*k),dy=Math.round((e.clientY-sy)*k);"
+                     "if(Math.abs(dx)+Math.abs(dy)>3)webNav('/vpan?dx='+dx+'&dy='+dy);});"
+                     "im.addEventListener('wheel',function(e){e.preventDefault();webNav('/vzoom?d='+(e.deltaY<0?1:-1));},{passive:false});})();"
                      // Stationspopup wie am Geraet (Klick/R in der Stationsliste, siehe handleInput()): zeigt
                      // Rufzeichen, km/Pegel/Alter und die Zusatzinfo (txt, von webAltStat() aus aprsComment[]
                      // mitgeliefert). lastSt[] haelt die zuletzt geladene Stationsliste fuer den Klick-Handler.
@@ -8630,6 +8769,32 @@ static void webViewFocus() {
   logLine(m);
   server.sendHeader("Location", "/menu");
   server.send(303, "text/plain", "");
+}
+
+// Karte per Maus/Finger verschieben (Ziehen auf dem Live-Bild in /menu) bzw. zoomen (Mausrad oder Knoepfe): dx/dy sind
+// Bildschirmpixel (320 x 240) der Ziehbewegung; sie werden in Trackball-Impulse umgerechnet (panAccX/Y, siehe mapNavTick()), die
+// Karte folgt der Bewegung wie beim Ziehen (Mitte wandert entgegengesetzt). Nur in der Kartenansicht; sonst ohne Wirkung.
+static void webViewPan() {
+  static double remX = 0, remY = 0;               // Rest unterhalb eines Impulses (panPx Pixel) nicht verlieren
+  if (mapMode && gfxView == 0 && gfxReady()) {
+    remX += -(double)server.arg("dx").toFloat() / ((double)panPx * PAN_DIR);
+    remY += -(double)server.arg("dy").toFloat() / ((double)panPx * PAN_DIR);
+    int ix = (int)lround(remX), iy = (int)lround(remY);
+    remX -= ix; remY -= iy;
+    panAccX = constrain(panAccX + ix, -2000, 2000);
+    panAccY = constrain(panAccY + iy, -2000, 2000);
+  }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/plain", "ok");
+}
+
+static void webViewZoom() {
+  if (mapMode && gfxView == 0 && gfxReady()) {
+    zoomPend += (server.arg("d").toInt() > 0) ? 1.0 : -1.0;     // eine ganze Zoomstufe, wie Taste D/A am Geraet
+    zoomPendMs = millis();
+  }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/plain", "ok");
 }
 
 static bool aprsSendBeacon();   // weiter unten definiert (siehe auch die zweite, identische Vorwaertsdeklaration
@@ -9930,6 +10095,7 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     aprsSeenMs[idx] = millis();
     aprsRecvKind[idx] = kind;
     aprsTrailAdd(idx, lat, lon);
+    gpxStationQueue(call, lat, lon);                  // v6.10.0: GPX-Spur <Rufzeichen>.gpx
     // Offset haengt vom Positionsformat ab (siehe aprsParsePosition()): unkomprimiert 1 ("!"/"=") + 18
     // (Position) + 1 (Symbol) = 20, komprimiert 1 + 9 (Tabelle+Lat4+Lon4) + 1 (Symbol) + 2 (Kurs/Tempo)
     // + 1 (Kompressions-Typ) = 14.
@@ -11436,6 +11602,7 @@ void setup() {
                                         "werden uebersprungen, es wird direkt aus einzelnen Dateien gelesen.");
     gpxBufIch = (GpxPoint *)ps_malloc(GPX_BUF_CAP * sizeof(GpxPoint));
     gpxBufSonde = (GpxPoint *)ps_malloc(GPX_BUF_CAP * sizeof(GpxPoint));
+    gpxBufSt = (GpxStPoint *)ps_malloc(GPX_BUF_CAP * sizeof(GpxStPoint));   // optional: ohne Puffer nur keine Stationsspuren
     if (!gpxBufIch || !gpxBufSonde) { Serial.println("GPX-Zwischenspeicher nicht allozierbar -> GPX-Aufzeichnung aus."); gpxOn = false; }
   }
   scrClear();
