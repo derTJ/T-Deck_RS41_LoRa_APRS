@@ -35,6 +35,9 @@
 static uint32_t WIFI_LOST_MS = 10000;                   // -- CFG: so lange darf die Heimnetz-Verbindung weg sein (z. B.
                                                 // kurzer Aussetzer), bevor das WLAN als "Netz verlassen" gilt und
                                                 // abgeschaltet wird
+static uint32_t WIFI_RETRY_MAX_MS = (10UL * 60UL * 1000UL);  // -- CFG: automatische Neuverbindung zum Heimnetz nach Verlust: Wartezeit
+                                                // startet bei 10 s und verdoppelt sich bis zu diesem Maximalwert (Default 10 min);
+                                                // 0 = nie automatisch neu versuchen
 static uint32_t WIFI_IDLE_OFF_MS = (5UL * 60UL * 1000UL);  // -- CFG: eigener Zugangspunkt, MANUELL im Menue W gestartet:
                                                 // geht nach so langer Zeit ohne verbundenes Geraet von selbst wieder
                                                 // aus (spart Akku). Gilt nicht fuer das Heimnetz -- dort haengt das
@@ -63,7 +66,6 @@ static uint32_t NTP_TIMEOUT_MS = 8000;    // -- CFG: so lange wird nach dem Verb
 #define LOG_DIR        "/log"                  // Text-Logs (an/aus im Menue P; je Neustart ein frisches Log)
 #define TITLE_TEXT     "RS41 | Enter=Menue  Space=Ansicht"   // Kopfzeile der Textansicht
 
-#define LOG_LEVEL      0       // 0 = eine Zeile pro Frame, 1 = zusaetzlich alle Blockdetails (siehe VLOG()/VLOGLN() im .ino)
 #define LOG_FALLBACK_MAX 99    // Platzhalter-Lognummer (01..LOG_FALLBACK_MAX), solange noch keine Uhrzeit (GPS/NTP) vorliegt
 #define SD_LOG         1       // 1 = Zeile pro Frame zusaetzlich auf die SD-Karte schreiben (/log/rs41_log_*.txt), 0 = aus
                                 // (bewusst NICHT per config.ini: ist bereits ueber Menue P + Preferences/NVS zur
@@ -211,6 +213,9 @@ static int FILTER_UNKNOWN_RETRY_N       = 8;         // -- CFG: so viele erfolgl
 // GPS-Filter (eigene Position) -- siehe gpsFilterFix()/posJumpOk()/gpsFixGoodEnoughToSend() im .ino
 // ========================================================================================================
 static uint32_t GPS_FILTER = 1;                 // -- CFG: 1 = Ausreisserfilter fuer eigene Position/Hoehe aktiv, 0 = Rohwerte (auch Menue "GPS-Filter")
+static uint32_t GPS_BEIDOU = 0;          // -- CFG: u-blox-GPS: BeiDou-Satelliten nutzen (0 = aus, 1 = an), Neustart noetig; BeiDou kommt oft ohne Bahndaten
+static uint32_t GPS_DBD_SAVE_S = 600;         // -- CFG: u-blox-GPS: Almanach/Ephemeriden alle so viele Sekunden (bei gutem Fix) auf die SD-Karte sichern und beim Start ans Modul zurueckgeben; 0 = aus
+static uint32_t LOG_LEVEL = 1;            // -- CFG: Log-Umfang: 0 = nur Wichtiges, 1 = Standard, 2 = ausfuehrlich (alle Hinweise, Web-Anfragen, Akku/GPS alle 20 s)
 static float GPS_MAX_SPEED_MS = 55.0f;         // -- CFG: ~200 km/h + Marge, deckt Auto/Rad/Fuss grosszuegig ab --
                                                        // Obergrenze fuer "plausible" Bewegung zwischen zwei Fixes
 static float GPS_JUMP_MARGIN_M = 50.0f;        // -- CFG: zusaetzliche Toleranz gegen normales GPS-Jittern

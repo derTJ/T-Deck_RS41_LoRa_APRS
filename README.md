@@ -19,6 +19,11 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
 - **RS41 ohne Frameverlust** (`RS41_ONESYNC`, Standard 1, Menü „RS41-Empfang“): nach Schritt 1 folgt ein zweiter, kurzer Sync im selben Frame auf den Positionsblock; so kommt jeder Frame an (früher nur jeder zweite). 0 = altes Verfahren, bei Misserfolg Rückfall darauf.
 - **Lautstärke** (Menü „Lautstärke“, Taste `+`): 0 bis 100 % für alle Töne.
 - **GPS-Filter** (Menü „GPS-Filter“, Taste `/`, `GPS_FILTER` in der config.ini): Ausreißerfilter für die eigene Position/Höhe ein- oder ausschalten.
+- **Log-Stufen** (`LOG_LEVEL` in der config.ini): 0 = nur Wichtiges, 1 = Standard, 2 = ausführlich. Die Sondendaten-Zeilen je Paket stehen nur bei Stufe 2 im Log (bei einer Graw/DFM-Sonde in Reichweite also `LOG_LEVEL=2` setzen).
+- **u-blox-GPS** (erkannt an 38400 Baud): BeiDou abschaltbar (`GPS_BEIDOU`, Standard 0), Starthilfe mit letzter Position und Uhrzeit. Die GPS-Datenbank (Almanach/Ephemeriden) wird bei gutem Fix alle `GPS_DBD_SAVE_S` Sekunden (Standard 600, 0 = aus) und beim Herunterfahren (mit Ladebalken) als `/gpsdb.bin` auf der SD-Karte gesichert und beim Start ins Modul zurückgespielt. Im Log: „GPS: erster Fix N s nach dem Start“.
+- **WLAN-Neuverbindung**: nach Verlust oder fehlgeschlagenem Start wird mit verdoppelter Wartezeit (10 s, 20 s, 40 s …) neu verbunden, höchstens alle `WIFI_RETRY_MAX_S` (Standard 10 min, 0 = aus).
+- **Stationsspuren**: gehörte LoRa-APRS-Stationen erscheinen mit Spur auf der Karte (`APRS_TRAIL_MAX` Punkte, auf `APRS_TRAIL_KM` Länge gekürzt) und werden als `<Rufzeichen>.gpx` fortgesetzt.
+- **Nachtmodus** (Taste `N`): Display und Tastenlicht komplett aus, nochmal `N` stellt die letzte Helligkeit wieder her.
 - **Zeiten in der `config.ini`** (Namen auf `_S`): ganze Zahlen und Kommazahlen sind Sekunden (`90`, `3.456`, `3,456`, `.1` = 100 ms), auch mit Einheit (`3.456s`, `3456ms`). Mit Doppelpunkt gilt `[hh]:[mm[:ss[.ttt]]]`: `1:30` = 1 h 30 min, `:30` = 30 min, `:1:30.5` = 1 min 30,5 s. Werte über 60 s schreibt die Firmware als `hh:mm:ss.ttt`. Alte `_MS`-Einträge funktionieren weiter.
 - RS41-Dekodierung inkl. CRC-Prüfung, GPS-Zeit/-Position/-Höhe, Steig-/Sinkrate, Landevorhersage (lokal und
   optional online per Tawhiri/SondeHub-Windvorhersage)
@@ -33,7 +38,7 @@ Kein zusätzliches Board, kein Zusatzmodul: läuft komplett auf der im T-Deck Pl
   radiosondy.info
 - GPX-Aufzeichnung (eigene Position, Sonde und gehörte LoRa-APRS-Stationen als `<Rufzeichen>.gpx`, fortgesetzt bei erneutem Empfang), Screenshots mit EXIF-Koordinaten, SD-Kartenlog mit
   GPS-/Akku-Diagnosedaten
-- Weboberfläche: Live-Bild des Displays (Karte per Maus/Finger ziehen, Mausrad zoomt), vollständige Fernsteuerung aller Menüpunkte, Screenshot-/Log-Download
+- Weboberfläche: Live-Bild des Displays (Karte per Maus/Finger ziehen, Mausrad zoomt stufenweise), Fernsteuerung aller Menüpunkte und der wichtigsten Gerätetasten per Knopf ohne Seitenneuladen, Einstellungsseite für die `config.ini` (Speichern mit Kurzhinweis), Screenshot-/Log-Download
 - Firmware-Update per WLAN (ArduinoOTA) ohne USB-Kabel, sobald einmal per USB geflasht
 
 ## Hardware
@@ -162,6 +167,8 @@ kopiert werden. Alle Optionen: `python3 Tools/pack_tiles.py --help`.
   Karte mit Fokus auf genau diese Station öffnen
 - **Q**: Sondenfund melden / geordnetes Herunterfahren (je nach Kontext)
 - **C**: Screenshot
+- **N**: Nachtmodus (Display und Tastenlicht aus/an)
+- **H**: Hilfe zur aktuellen Ansicht (Karte, Stationsliste, GPS-Radar)
 
 Vollständige Tastenbelegung und Menüpunkte: Kopfkommentar in `tdeck_rs41_v2.ino`.
 

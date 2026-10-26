@@ -1,4 +1,4 @@
-// Version 6.11.0
+// Version 6.16.2
 // T-Deck Plus – RS41 Empfang v2 (SX1262, FSK)
 //
 // ===========================================================================
@@ -637,6 +637,27 @@
 //       verschoben (x 264 -> 270, optischer Wunsch) -- scrFlush()/die Menue-Auswahlleisten-Aussparung wurden
 //       entsprechend mitgezogen.
 //
+//  - v6.16.2 (Okt. 2026): Herunterfahren: Ladebalken (mit Prozent und Nachrichtenzahl) beim Sichern der GPS-Datenbank.
+//  - v6.16.1 (Okt. 2026): Weboberflaeche /menu: weitere Geraetetasten als Knoepfe (hoch/runter, Klick, Ruecktaste, M, L, C, U, $, 0, N) ueber /key.
+//  - v6.16.0 (Okt. 2026): u-blox-GPS: Datenbank (Almanach, Ephemeriden) wird per UBX-MGA-DBD ausgelesen, als /gpsdb.bin auf der SD-Karte gesichert (bei gutem Fix alle
+//    GPS_DBD_SAVE_S Sekunden, Default 600, 0 = aus; ausserdem beim Herunterfahren) und beim naechsten Start vor Position/Uhrzeit wieder ins Modul eingespielt.
+//    Neue ini-Zeile GPS_DBD_SAVE_S; settings.h muss mit ersetzt werden.
+//  - v6.15.1 (Okt. 2026): Fix: settings.h enthielt noch das alte "#define LOG_LEVEL 0" neben der neuen Variable (Compile-Fehler); entfernt. VLOG()-Seriell-Details jetzt erst ab LOG_LEVEL 2.
+//  - v6.15.0 (Okt. 2026): Weboberflaeche: alle Knoepfe (Ansicht, Zentrieren, Position senden, Menuepunkte +/-/Setzen/Auswahl, Stationsfokus) per JavaScript ohne
+//    Seitenneuladen; Menuetabelle wird ueber /mrows nachgeladen. Einstellungsseite /cfg: Speichern/Hochladen/Zuruecksetzen ohne Extra-Klick, nur ein Kurzhinweis. Mausrad-Zoom
+//    auf der Webkarte: eine Stufe pro Rastung statt Sprung von Zoom 6 bis 19. Taste N = Nachtmodus (Display + Tastenlicht komplett aus, nochmal N = zurueck) statt Test-Tempo.
+//    Taste H in der LoRa-Stationsliste zeigt die Tastenhilfe.
+//  - v6.14.1 (Okt. 2026): Sondendaten-Zeilen (Frame-Zeile RS41/DFM, Rohdaten-Hex) nur noch bei LOG_LEVEL=2; bei 0 und 1 nicht mehr im Log.
+//  - v6.14.0 (Okt. 2026): Log-Stufe LOG_LEVEL (config.ini): 0 = nur Wichtiges, 1 = Standard (Default), 2 = ausfuehrlich wie bisher. Stufe 1/0 blenden u. a. die
+//    Akku-Zeile (alle 60 s), Web-Anfragen, Fund-Zeit-Messungen, Karten-Hinweise und wiederholte Stationsmeldungen aus; GPS-Zustandszeile alle 60 s
+//    (Stufe 1) bzw. nur bei Wechsel (Stufe 0). settings.h gleichzeitig ersetzen.
+//  - v6.13.1 (Okt. 2026): Log-Zeile "GPS: u-blox, BeiDou ..." wurde nach "Uhrzeit a" abgeschnitten (Puffer zu klein).
+//  - v6.13.0 (Okt. 2026): u-blox-GPS (38400 Baud): BeiDou per GPS_BEIDOU (ini, Default 0 = aus; Neustart noetig) abschaltbar, da BeiDou-Satelliten oft ohne
+//    Bahndaten empfangen werden und nicht nutzbar sind. Starthilfe fuer schnelleren ersten Fix: zuletzt bekannte Position und (sobald per NTP bekannt)
+//    Uhrzeit per UBX-MGA-INI ans Modul. Log meldet "erster Fix nach N s". settings.h gleichzeitig ersetzen.
+//  - v6.12.0 (Okt. 2026): WLAN-Neuverbindung zum Heimnetz: nach Verlust der Verbindung, nach gescheitertem Start (nach dem Boot-Zugangspunkt) und nach
+//    gescheiterten Versuchen wird regelmaessig neu verbunden, Wartezeit 10 s, 20 s, 40 s ... verdoppelt bis WIFI_RETRY_MAX_S (ini, Default 10 min, 0 = aus).
+//    Gilt nur mit bekanntem Heimnetz; eine bewusste Umschaltung im Menue W beendet den Retry. settings.h gleichzeitig ersetzen.
 //  - v6.11.0 (Okt. 2026): Weboberflaeche (/menu): Karte auf dem Live-Bild per Maus/Finger ziehen (verschiebt die Karte am Geraet), Mausrad bzw.
 //    Knoepfe "Zoom +/-" zoomen; neue Aufrufe /vpan und /vzoom, nur in der Kartenansicht wirksam. settings.h unveraendert.
 //  - v6.10.1 (Okt. 2026): Laenge der Stationsspuren auf der Karte per config.ini einstellbar: APRS_TRAIL_MAX (Punkte, 2..80) und APRS_TRAIL_KM (km). settings.h
@@ -942,7 +963,7 @@ static uint32_t gpxLastFlushMs = 0;
 // jeden gleich, nur config.h ist persoenlich.
 // ===========================================================================
 #include "config.h"              // definiert FW_CALLSIGN, HOME_LAT, HOME_LON
-#define FW_VERSION     "6.11.0"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
+#define FW_VERSION     "6.16.2"   // von Hand hochzaehlen, wenn eine Aenderung es wert ist -- Compile-Datum/-Zeit
                                 // (siehe bootSplash()) kommt ohnehin automatisch vom Compiler (__DATE__/__TIME__)
 // Tastatur (I2C) und Trackball des T-Deck
 #define PIN_KB_SDA     18
@@ -966,8 +987,8 @@ static uint32_t gpxLastFlushMs = 0;
 // unrealistischen Fall, dass wirklich alle Nummern bis LOG_FALLBACK_MAX belegt sind, faengt es wieder bei 01 an).
 // LOG_FALLBACK_MAX -- siehe settings.h
 // SD_LOG -- siehe settings.h
-#define VLOG(...)   do { if (LOG_LEVEL >= 1) Serial.printf(__VA_ARGS__); } while (0)
-#define VLOGLN(s)   do { if (LOG_LEVEL >= 1) Serial.println(s); } while (0)
+#define VLOG(...)   do { if (LOG_LEVEL >= 2) Serial.printf(__VA_ARGS__); } while (0)
+#define VLOGLN(s)   do { if (LOG_LEVEL >= 2) Serial.println(s); } while (0)
 const float TCXO_V     = 1.8;
 const float SCAN_START = 400.0;
 const float SCAN_END   = 406.0;
@@ -1093,6 +1114,7 @@ static bool menuOpen = false;           // true waehrend runMenu() laeuft (Fix v
 static uint8_t brightPct = 100;         // Displayhelligkeit in Prozent, 10..100 (nie ganz aus)
 static uint8_t kbMode = 2;              // Tastenlicht: 0 aus, 1 bei Tastendruck, 2 bei Tastendruck nur wenn es dunkel ist
 static bool kbLit = false;              // Tastenlicht ist gerade an (Modus 2: auch im gedimmten Zustand true)
+static bool nightMode = false;          // Taste N (v6.15.0): Display und Tastenlicht komplett aus, nur im RAM; Helligkeit/Tastenlicht-Modus bleiben gespeichert
 static uint32_t kbBrightUntil = 0;      // Modus 2: bis wann hell nach einem Tastendruck, danach zurueck auf KB_LEVEL_DIM (0 = nicht aktiv)
 static uint32_t kbOffAt = 0;            // Zeitpunkt, an dem es wieder ausgeht
 #define NSTYLE 5
@@ -1100,6 +1122,8 @@ static uint8_t mapStyle = 0;            // Kartenart: 0 Rad (/tiles), 1 Luftbild
 static bool styleAvail[NSTYLE] = {true, false, false, false, false};   // welche Kartenarten auf der SD-Karte vorhanden sind
 static bool wifiOn = false;             // Webserver laeuft (Heimnetz verbunden oder Zugangspunkt), beim Start immer aus
 static uint8_t wifiMode = 0;            // 0 aus, 1 Heimnetz (Station), 2 eigener Zugangspunkt (Menue W)
+static bool wifiRetryOn = false;         // v6.12.0: automatische Neuverbindung zum Heimnetz laeuft (nach Verlust/gescheitertem Start)
+static uint32_t wifiRetryNextMs = 0, wifiRetryDelayMs = 10000;   // naechster Versuch / aktuelle Wartezeit (verdoppelt sich bis WIFI_RETRY_MAX_MS)
 static bool wifiConnecting = false;     // Verbindung zum Heimnetz wird aufgebaut
 static uint32_t wifiActivityMs = 0;     // eigener Zugangspunkt: Zeitpunkt des letzten verbundenen Geraets -- siehe wifiIdleTick()
 static uint32_t wifiConnMs = 0;
@@ -1672,6 +1696,12 @@ static void logLine(const char *s) {
   }
 }
 
+// Log mit Stufe (v6.14.0): LOG_LEVEL (config.ini) 0 = nur Wichtiges (Start, Fehler, Funde, Sondendaten, neue Stationen), 1 = Standard (Default),
+// 2 = ausfuehrlich (wie bisher: alle Hinweise, Web-Anfragen, Akku/GPS im 20-s-Takt usw.). logLine() selbst loggt immer (Stufe 0).
+static void logLineL(uint8_t level, const char *s) {
+  if (LOG_LEVEL >= level) logLine(s);
+}
+
 // ---------- GPS (NMEA GGA: Position; RMC: Uhrzeit, Datum und eigene Geschwindigkeit) ----------
 // hdop <= 0 bedeutet "unbekannt/kein aktueller Wert" (noch kein GGA-Satz mit Fix verarbeitet) -- siehe parseNmea().
 struct GpsState { bool fix; double lat, lon; float alt; int sats; uint32_t bytes; uint32_t lastFix; uint32_t lastByteMs; float speedKmh; float hdop; float courseDeg; };
@@ -1994,14 +2024,14 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
       double offM = haversineKm(ownFiltLat, ownFiltLon, ownPendLat, ownPendLon) * 1000.0;
       char m[110];
       snprintf(m, sizeof(m), "GPS-Filter: Sprung %.0f m bestaetigt -> uebernommen (%d Sat, HDOP %.1f)", offM, gps.sats, gps.hdop);
-      logLine(m);
+      logLineL(1, m);
       ownFiltLat = lat; ownFiltLon = lon; ownFiltMs = now;
       ownPendValid = false;
       posOk = true;
     } else if (now - ownFiltMs > GPS_GLITCH_TIMEOUT_MS) {   // seit 2 Min. keine akzeptierte Position mehr: nicht ewig festhalten
       char m[72];
       snprintf(m, sizeof(m), "GPS-Filter: %lu s ohne akzeptierten Fix -> naechster Fix uebernommen", (unsigned long)((now - ownFiltMs) / 1000));
-      logLine(m);
+      logLineL(1, m);
       ownFiltLat = lat; ownFiltLon = lon; ownFiltMs = now;
       ownPendValid = false;
       posOk = true;
@@ -2016,7 +2046,7 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
       char m[128];
       if (pendConfirmed) snprintf(m, sizeof(m), "GPS-Filter: Sprung %.0f m bestaetigt, aber Geometrie zu schlecht -> weiter verworfen (%d Sat, HDOP %.1f)", offM, gps.sats, gps.hdop);
       else snprintf(m, sizeof(m), "GPS-Filter: Positionsausreisser verworfen (%.0f m, %d Sat, HDOP %.1f)", offM, gps.sats, gps.hdop);
-      logLine(m);
+      logLineL(1, m);
       ownPendValid = true;                                // (aktualisierter) Kandidat: als naechstes gegen DIESEN Fix pruefen
       ownPendLat = lat; ownPendLon = lon; ownPendMs = now;
       posOk = false;
@@ -2038,7 +2068,7 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
     {
       char m[90];
       snprintf(m, sizeof(m), "GPS-Filter: Hoehensprung %.0f->%.0f m bestaetigt -> uebernommen", ownAltFiltVal, alt);
-      logLine(m);
+      logLineL(1, m);
     }
     ownAltPendValid = false;
     altOk = true;
@@ -2049,7 +2079,7 @@ static bool gpsFilterFix(double lat, double lon, float alt, double &fLat, double
     {
       char m[90];
       snprintf(m, sizeof(m), "GPS-Filter: Hoehenausreisser verworfen (%.0f m statt zuletzt %.0f m)", alt, ownAltFiltVal);
-      logLine(m);
+      logLineL(1, m);
     }
     ownAltPendValid = true;                              // Ausreisser (z. B. der einzelne 0-m-Punkt): verwerfen
     ownAltPendVal = alt; ownAltPendMs = now;
@@ -2217,11 +2247,13 @@ static void parseNmea(char *s) {
   }
 }
 
+static bool ubxFeed(uint8_t c);   // weiter unten (u-blox-Teil): verarbeitet UBX-Antworten des Moduls
 static void gpsPoll() {
   while (Serial1.available()) {
     char c = Serial1.read();
     gps.bytes++;
     gps.lastByteMs = millis();
+    if (ubxFeed((uint8_t)c)) continue;                // binaere UBX-Nachricht (v6.16.0), nicht als NMEA auswerten
     if (c == '$') nmeaLen = 0;
     if (nmeaLen < (int)sizeof(nmeaBuf) - 1) nmeaBuf[nmeaLen++] = c;
     if (c == '\n') {
@@ -2230,6 +2262,187 @@ static void gpsPoll() {
       nmeaLen = 0;
     }
   }
+}
+
+// ---- u-blox-Modul (erkannt an 38400 Baud): BeiDou schaltbar, Starthilfe mit Position und Uhrzeit (v6.13.0) ----
+// BeiDou-Satelliten werden oft zwar empfangen, aber ohne Bahndaten (Elevation/Azimut -1 im GPS-Radar) -- sie koennen dann nicht fuer die
+// Position genutzt werden und belegen nur Kanaele. GPS_BEIDOU = 0 (config.ini, Default) schaltet BeiDou ab. Die Einstellung geht nur per
+// RAM-Schicht ans Modul und wird bei jedem Start neu gesendet; ein Neustart ist nach einer Aenderung in der ini noetig.
+// Starthilfe (UBX-MGA-INI): zuletzt bekannte Position (grob, +-50 km) und -- sobald bekannt -- die Uhrzeit, solange noch kein Fix besteht.
+static bool gpsUblox = false;
+static bool gpsAssistTimeSent = false;
+static void ubxSend(uint8_t cls, uint8_t id, const uint8_t *pl, uint16_t len) {
+  uint8_t hdr[6] = {0xB5, 0x62, cls, id, (uint8_t)(len & 0xFF), (uint8_t)(len >> 8)};
+  uint8_t a = 0, b = 0;
+  for (int i = 2; i < 6; i++) { a += hdr[i]; b += a; }
+  for (uint16_t i = 0; i < len; i++) { a += pl[i]; b += a; }
+  Serial1.write(hdr, 6);
+  if (len) Serial1.write(pl, len);
+  Serial1.write(a);
+  Serial1.write(b);
+}
+static void ubxPutLE(uint8_t *p, uint32_t v, int n) { for (int i = 0; i < n; i++) p[i] = (uint8_t)((v >> (8 * i)) & 0xFF); }
+static void gpsUbloxConfig() {                                   // UBX-CFG-VALSET (nur RAM): CFG-SIGNAL-BDS_ENA (0x10310022)
+  uint8_t pl[9] = {0x00, 0x01, 0x00, 0x00, 0x22, 0x00, 0x31, 0x10, (uint8_t)(GPS_BEIDOU ? 1 : 0)};
+  ubxSend(0x06, 0x8A, pl, sizeof(pl));
+  uint8_t pu[9] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x74, 0x10, 0x01};   // CFG-UART1OUTPROT-UBX = 1 (Antworten auf MGA-DBD-Abfrage)
+  ubxSend(0x06, 0x8A, pu, sizeof(pu));
+}
+
+// ---- GPS-Datenbank (Almanach, Ephemeriden, Ionosphaere ...) sichern und beim Start wieder einspielen (v6.16.0) ----
+// UBX-MGA-DBD (0x13 0x80): Abfrage ohne Nutzdaten -> das Modul schickt seine ganze Datenbank als Folge gleichnamiger Nachrichten.
+// Sie werden unveraendert hintereinander in /gpsdb.bin auf der SD-Karte abgelegt und beim naechsten Start in gleicher Weise an
+// das Modul zurueckgeschickt. Gesichert wird bei gutem Fix alle GPS_DBD_SAVE_S Sekunden (0 = aus) und beim Herunterfahren.
+#define GPS_DB_FILE "/gpsdb.bin"
+#define GPS_DB_CAP  16384
+static uint8_t *gpsDbBuf = nullptr;
+static size_t gpsDbLen = 0;
+static int gpsDbFrames = 0;
+static bool gpsDbDumping = false;
+static uint32_t gpsDbStartMs = 0, gpsDbLastFrameMs = 0, gpsDbLastSaveMs = 0;
+static uint8_t ubxFrm[400];
+static int ubxPos = 0;
+static uint16_t ubxLen = 0;
+static bool ubxIn = false;
+static void ubxDone() {                                          // komplette UBX-Nachricht in ubxFrm[0..ubxPos-1]
+  uint8_t a = 0, b = 0;
+  for (int i = 2; i < ubxPos - 2; i++) { a += ubxFrm[i]; b += a; }
+  if (a != ubxFrm[ubxPos - 2] || b != ubxFrm[ubxPos - 1]) return;
+  if (gpsDbDumping && ubxFrm[2] == 0x13 && ubxFrm[3] == 0x80 && gpsDbBuf && gpsDbLen + ubxPos <= GPS_DB_CAP) {
+    memcpy(gpsDbBuf + gpsDbLen, ubxFrm, ubxPos);
+    gpsDbLen += ubxPos;
+    gpsDbFrames++;
+    gpsDbLastFrameMs = millis();
+  }
+}
+static bool ubxFeed(uint8_t c) {                                 // true = Byte gehoert zu einer UBX-Nachricht
+  if (!ubxIn) {
+    if (c != 0xB5) return false;
+    ubxIn = true; ubxFrm[0] = c; ubxPos = 1;
+    return true;
+  }
+  if (ubxPos == 1 && c != 0x62) { ubxIn = false; return false; }
+  if (ubxPos < (int)sizeof(ubxFrm)) ubxFrm[ubxPos] = c;
+  ubxPos++;
+  if (ubxPos == 6) {
+    ubxLen = (uint16_t)(ubxFrm[4] | (ubxFrm[5] << 8));
+    if (ubxLen > sizeof(ubxFrm) - 8) { ubxIn = false; return true; }
+  }
+  if (ubxPos >= 8 && ubxPos == (int)ubxLen + 8) { ubxIn = false; ubxDone(); }
+  return true;
+}
+static void gpsDbDumpStart() {
+  if (!gpsDbBuf) {
+    gpsDbBuf = (uint8_t *)heap_caps_malloc(GPS_DB_CAP, MALLOC_CAP_SPIRAM);
+    if (!gpsDbBuf) gpsDbBuf = (uint8_t *)malloc(GPS_DB_CAP);
+    if (!gpsDbBuf) return;
+  }
+  gpsDbLen = 0; gpsDbFrames = 0;
+  gpsDbDumping = true;
+  gpsDbStartMs = gpsDbLastFrameMs = millis();
+  ubxSend(0x13, 0x80, nullptr, 0);
+}
+// true = Abfrage beendet (Datenbank gespeichert oder fehlgeschlagen), false = laeuft noch
+static bool gpsDbDumpFinish() {
+  if (!gpsDbDumping) return true;
+  uint32_t n = millis();
+  bool quiet = gpsDbFrames > 0 && n - gpsDbLastFrameMs > 600;
+  bool timeout = n - gpsDbStartMs > 6000;
+  if (!quiet && !timeout) return false;
+  gpsDbDumping = false;
+  char m[80];
+  if (gpsDbFrames < 3) { logLineL(1, "GPS: Datenbank-Abfrage ohne Antwort (Modul kennt MGA-DBD nicht?)"); return true; }
+  bool ok = false;
+  if (sdReady) {
+    SD.remove(GPS_DB_FILE);
+    File f = SD.open(GPS_DB_FILE, FILE_WRITE);
+    if (f) { ok = f.write(gpsDbBuf, gpsDbLen) == gpsDbLen; f.close(); }
+  }
+  snprintf(m, sizeof(m), ok ? "GPS: Datenbank gesichert, %d Nachrichten, %u Bytes" : "GPS: Datenbank NICHT gesichert (SD-Fehler, %d Nachr.)",
+           gpsDbFrames, (unsigned)gpsDbLen);
+  logLineL(1, m);
+  return true;
+}
+static void gpsDbBar(int pct, int nMsg) {                        // Ladebalken beim Sichern (v6.16.2)
+  tft.fillRect(0, 90, 320, 70, ST77XX_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_CYAN);
+  tft.setCursor(20, 94);
+  tft.print("GPS-Datenbank wird gesichert ...");
+  tft.drawRect(20, 112, 280, 18, ST77XX_WHITE);
+  tft.fillRect(22, 114, (276 * pct) / 100, 14, ST77XX_GREEN);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setCursor(20, 138);
+  tft.printf("%d %%   %d Nachrichten", pct, nMsg);
+}
+static void gpsDbSaveBlocking() {                                // beim Herunterfahren: kurz warten, bis die Datenbank da ist
+  if (!gpsUblox || !GPS_DBD_SAVE_S || !gps.fix) return;
+  tft.fillScreen(ST77XX_BLACK);
+  gpsDbBar(0, 0);
+  gpsDbDumpStart();
+  uint32_t t0 = millis();
+  int lastPct = -1;
+  while (!gpsDbDumpFinish() && millis() - t0 < 7000) {
+    gpsPoll();
+    delay(5);
+    // Gesamtmenge vorab unbekannt: Fortschritt aus der Zeit (typisch ~2 s) und dem Eintreffen der Nachrichten schaetzen, bis 95 %
+    int pct = (int)min(95UL, (unsigned long)((millis() - t0) * 95UL / 2500UL));
+    if (pct != lastPct) { lastPct = pct; gpsDbBar(pct, gpsDbFrames); }
+  }
+  gpsDbBar(100, gpsDbFrames);
+  delay(400);
+}
+static void gpsDbRestore() {
+  if (!sdReady || !GPS_DBD_SAVE_S) return;
+  File f = SD.open(GPS_DB_FILE);
+  if (!f) { logLineL(1, "GPS: keine gesicherte Datenbank vorhanden"); return; }
+  size_t sz = f.size();
+  if (sz < 20 || sz > GPS_DB_CAP) { f.close(); return; }
+  uint8_t *b = (uint8_t *)heap_caps_malloc(sz, MALLOC_CAP_SPIRAM);
+  if (!b) b = (uint8_t *)malloc(sz);
+  if (!b) { f.close(); return; }
+  size_t got = f.read(b, sz);
+  f.close();
+  int n = 0;
+  size_t i = 0;
+  while (got == sz && i + 8 <= sz) {
+    if (b[i] != 0xB5 || b[i + 1] != 0x62 || b[i + 2] != 0x13 || b[i + 3] != 0x80) break;
+    size_t len = (size_t)(b[i + 4] | (b[i + 5] << 8)) + 8;
+    if (i + len > sz) break;
+    Serial1.write(b + i, len);
+    Serial1.flush();
+    delay(4);
+    i += len; n++;
+  }
+  free(b);
+  char m[72];
+  snprintf(m, sizeof(m), "GPS: Datenbank eingespielt, %d Nachrichten, %u Bytes", n, (unsigned)i);
+  logLine(m);
+}
+
+static void gpsUbloxSendPos() {                                  // UBX-MGA-INI-POS_LLH
+  uint8_t pl[20] = {0};
+  pl[0] = 0x01;
+  ubxPutLE(pl + 4, (uint32_t)(int32_t)lround(homeLat * 1e7), 4);
+  ubxPutLE(pl + 8, (uint32_t)(int32_t)lround(homeLon * 1e7), 4);
+  ubxPutLE(pl + 12, 10000, 4);                                   // 100 m (cm), grob
+  ubxPutLE(pl + 16, 5000000, 4);                                 // Genauigkeit 50 km (cm)
+  ubxSend(0x13, 0x40, pl, sizeof(pl));
+}
+static bool gpsUbloxSendTime() {                                 // UBX-MGA-INI-TIME_UTC, false = Uhrzeit noch nicht bekannt
+  time_t t = time(nullptr);
+  if (t < 1700000000) return false;
+  struct tm u;
+  gmtime_r(&t, &u);
+  uint8_t pl[24] = {0};
+  pl[0] = 0x10;
+  pl[3] = 0x80;                                                  // Schaltsekunden unbekannt (-128)
+  ubxPutLE(pl + 4, (uint32_t)(u.tm_year + 1900), 2);
+  pl[6] = (uint8_t)(u.tm_mon + 1); pl[7] = (uint8_t)u.tm_mday;
+  pl[8] = (uint8_t)u.tm_hour; pl[9] = (uint8_t)u.tm_min; pl[10] = (uint8_t)u.tm_sec;
+  ubxPutLE(pl + 16, 5, 2);                                       // Zeitgenauigkeit 5 s
+  ubxSend(0x13, 0x40, pl, sizeof(pl));
+  return true;
 }
 
 // Baudrate suchen: erste Rate, bei der '$' (NMEA) ankommt
@@ -2246,11 +2459,20 @@ static void gpsBegin() {
       delay(5);
     }
     if (dollars >= 2) {
-      char m[48];
+      char m[112];                                      // v6.13.1: war 48 -- die u-blox-Meldung unten wurde abgeschnitten
       snprintf(m, sizeof(m), "GPS: NMEA-Daten bei %lu Baud", (unsigned long)bauds[i]);
       logLine(m);
       gps.bytes++;
       gps.lastByteMs = millis();
+      if (bauds[i] == 38400) {                          // u-blox (siehe Kommentar oben): BeiDou schalten, Starthilfe senden
+        gpsUblox = true;
+        gpsUbloxConfig();
+        gpsDbRestore();                                 // Almanach/Ephemeriden vom letzten Mal zurueck ins Modul (v6.16.0)
+        gpsUbloxSendPos();
+        gpsAssistTimeSent = gpsUbloxSendTime();
+        snprintf(m, sizeof(m), "GPS: u-blox, BeiDou %s, Position%s als Starthilfe gesendet", GPS_BEIDOU ? "an" : "aus", gpsAssistTimeSent ? " und Uhrzeit" : "");
+        logLine(m);
+      }
       return;
     }
   }
@@ -2278,7 +2500,26 @@ static void gpsLogTick() {
   bool alive = gps.bytes > 0 && now - gps.lastByteMs < 3000;
   bool fixNow = gps.fix && now - gps.lastFix < 5000;
   int st = !alive ? 0 : (fixNow ? 2 : 1);
-  if (st != prevState || now - lastLog >= 20000UL) {
+  if (gpsUblox && !gpsAssistTimeSent) {             // Uhrzeit nachreichen, sobald sie bekannt ist (NTP) und noch kein Fix besteht
+    if (fixNow) gpsAssistTimeSent = true;
+    else if (timeSet && gpsUbloxSendTime()) { gpsAssistTimeSent = true; logLine("GPS: Uhrzeit als Starthilfe gesendet"); }
+  }
+  if (gpsUblox && GPS_DBD_SAVE_S) {                 // Datenbank regelmaessig sichern (v6.16.0), erstmals 2 min nach dem Start
+    if (gpsDbDumping) gpsDbDumpFinish();
+    else if (st == 2 && gps.sats >= 6 && now >= 120000UL && (gpsDbLastSaveMs == 0 || now - gpsDbLastSaveMs >= GPS_DBD_SAVE_S * 1000UL)) {
+      gpsDbLastSaveMs = now;
+      gpsDbDumpStart();
+    }
+  }
+  static bool ttffLogged = false;
+  if (st == 2 && !ttffLogged) {
+    ttffLogged = true;
+    char tm[64];
+    snprintf(tm, sizeof(tm), "GPS: erster Fix %lu s nach dem Start (%d Sat)", (unsigned long)(now / 1000), gps.sats);
+    logLine(tm);
+  }
+  uint32_t logEvery = (LOG_LEVEL >= 2) ? 20000UL : (LOG_LEVEL == 1 ? 60000UL : 0xFFFFFFFFUL);   // Stufe 0: nur bei Zustandswechsel
+  if (st != prevState || now - lastLog >= logEvery) {
     prevState = st;
     lastLog = now;
     char tt[12], m[150];
@@ -3414,7 +3655,7 @@ static void batteryLogTick() {
   char tt[12], m[64];
   timeText(tt, sizeof(tt));
   snprintf(m, sizeof(m), "t%lu %s Bat%.2fV/%d%%%s", (unsigned long)(now / 1000), tt, batV, batPct, batChg ? "+" : "");
-  logLine(m);
+  logLineL(2, m);
 }
 
 // Hinweis am Bildschirm (Toast) fuer kurze Rueckmeldungen
@@ -3954,7 +4195,7 @@ static void enterManual(const char *reason) {
   mapManual = true;
   char m[48];
   snprintf(m, sizeof(m), "Karte: manuell (%s)", reason);
-  logLine(m);
+  logLineL(2, m);
   if (shownZ > 0) {
     manZoom = shownZ;
     pixelToLatLon(shownCx, shownCy, shownZ, manLat, manLon);
@@ -4868,7 +5109,7 @@ static bool kbTouchLikeMode1(int modeForLog) {    // Modus-1-Verhalten, auch von
       kbLit = true;
       char m[56];
       snprintf(m, sizeof(m), "Tastenlicht: an (Modus %d, Helligkeit %d)", modeForLog, KB_LEVEL);
-      logLine(m);
+      logLineL(2, m);
     }
   }
   kbOffAt = millis() + KB_ON_MS;
@@ -4876,6 +5117,7 @@ static bool kbTouchLikeMode1(int modeForLog) {    // Modus-1-Verhalten, auch von
 }
 
 static bool kbTouch() {
+  if (nightMode) return false;                    // Nachtmodus: Tastenlicht bleibt aus
   if (kbMode == 2) {
     if (!isDark()) return kbTouchLikeMode1(kbMode);   // tagsueber: wie Modus 1
     if (kbLit) {                                  // nachts ist das Licht ohnehin schon an (gedimmt) --
@@ -4899,6 +5141,7 @@ static bool kbTouch() {
 //    Tastendruck (kbTouch()) hellt kurz auf; nach KB_BRIGHT_MS ohne weiteren Druck dimmt kbTick() hier
 //    automatisch wieder zurueck.
 static void kbTick() {
+  if (nightMode) { if (kbLit) kbOff(); return; }   // Nachtmodus: Tastenlicht bleibt aus
   if (kbMode == 2) {
     if (isDark()) {
       if (!kbLit) {
@@ -5021,7 +5264,16 @@ static int pollInput() {
 // ---- Einstellungen speichern/laden
 static void applyBrightness() {
   int duty = 20 + ((int)brightPct - 10) * 235 / 90;     // 10 % -> 20/255, 100 % -> 255/255: das Display geht nie ganz aus
-  analogWrite(PIN_TFT_BL, constrain(duty, 20, 255));
+  analogWrite(PIN_TFT_BL, nightMode ? 0 : constrain(duty, 20, 255));
+}
+
+// Nachtmodus ein/aus (Taste N): aus = Display und Tastatur komplett dunkel, an = zurueck auf die zuletzt eingestellte
+// Helligkeit bzw. den eingestellten Tastenlicht-Modus (das Tastenlicht uebernimmt kbTick() von selbst).
+static void nightSet(bool on) {
+  nightMode = on;
+  applyBrightness();
+  if (on) kbOff();
+  logLineL(2, on ? "Nachtmodus: an" : "Nachtmodus: aus");
 }
 
 static void loadSettings() {
@@ -5151,8 +5403,12 @@ static const CfgEntry CFG_REGISTRY[] = {
   { "WIFI_LOST_S", CFG_MS, &WIFI_LOST_MS, 0, 600000 },
   { "RS41_ONESYNC", CFG_U32, &RS41_ONESYNC, 0, 1 },
   { "GPS_FILTER", CFG_U32, &GPS_FILTER, 0, 1 },
+  { "LOG_LEVEL", CFG_U32, &LOG_LEVEL, 0, 2 },
+  { "GPS_BEIDOU", CFG_U32, &GPS_BEIDOU, 0, 1 },
+  { "GPS_DBD_SAVE_S", CFG_SEC, &GPS_DBD_SAVE_S, 0, 86400 },
   { "SONDE_TYPES", CFG_U32, &SONDE_TYPES, 0, 2 },
   { "WIFI_IDLE_OFF_S", CFG_MS, &WIFI_IDLE_OFF_MS, 0, 3600000 },
+  { "WIFI_RETRY_MAX_S", CFG_MS, &WIFI_RETRY_MAX_MS, 0, 86400000 },
   { "WIFI_BOOT_HOME_TIMEOUT_S", CFG_MS, &WIFI_BOOT_HOME_TIMEOUT_MS, 0, 600000 },
   { "WIFI_BOOT_AP_S", CFG_MS, &WIFI_BOOT_AP_MS, 0, 3600000 },
   { "NTP_TIMEOUT_S", CFG_MS, &NTP_TIMEOUT_MS, 500, 60000 },
@@ -5812,7 +6068,7 @@ static bool takeScreenshot(bool inMenu, char *msg, size_t msgLen) {
   snprintf(msg, msgLen, "%s", name);
   char lg[140];
   snprintf(lg, sizeof(lg), "Screenshot: %s (%d kB), Koordinaten: %s", path, (size + 512) / 1024, haveSondePos ? "Sonde" : "T-Deck");
-  logLine(lg);
+  logLineL(1, lg);
   return true;
 }
 
@@ -5874,7 +6130,7 @@ static void listDir(const char *dir, const char *prefix, const char *suffix, std
 #if LISTDIR_DEBUG
       char m[96];
       snprintf(m, sizeof(m), "WLAN: listDir(%s) Eintrag: '%s' (%u B) -> %s", dir, sn.c_str(), (unsigned)e.size(), ok ? "match" : "kein Match");
-      logLine(m);
+      logLineL(2, m);
 #endif
     }
 #if LISTDIR_DEBUG
@@ -5889,7 +6145,7 @@ static void listDir(const char *dir, const char *prefix, const char *suffix, std
 #if LISTDIR_DEBUG
   char m2[96];
   snprintf(m2, sizeof(m2), "WLAN: listDir(%s): %d Eintraege gesehen (%d Ordner), %d passend", dir, seen, dirs, matched);
-  logLine(m2);
+  logLineL(2, m2);
 #endif
 }
 
@@ -6043,7 +6299,7 @@ static void webZipSend(std::vector<ZipEntry> &files, const char *zipName) {
   zipLE16(client, 0);
   char m[64];
   snprintf(m, sizeof(m), "WLAN: ZIP gesendet: %s (%u Datei(en), %u Byte)", zipName, (unsigned)files.size(), (unsigned)total);
-  logLine(m);
+  logLineL(2, m);
 }
 
 static void webZipShots() { std::vector<FileInfo> v; listDir(SHOT_DIR, "shot_", ".jpg", v); std::vector<ZipEntry> e; zipEntriesFromDir(SHOT_DIR, v, e); webZipSend(e, "screenshots.zip"); }
@@ -6079,7 +6335,7 @@ static void webZipSelected() {
     char lm[96];
     snprintf(lm, sizeof(lm), "WLAN: Anfrage POST /zm (ZIP Auswahl), %d Feld(er), von %s", server.args(),
              server.client().remoteIP().toString().c_str());
-    logLine(lm);
+    logLineL(2, lm);
   }
   std::vector<String> sel;
   collectSelected(sel);
@@ -6088,7 +6344,7 @@ static void webZipSelected() {
     char lm[96];
     snprintf(lm, sizeof(lm), "WLAN: ZIP-Auswahl: %d Name(n) (Body %d Byte(s), vorgemerkt %d)", (int)sel.size(),
              (int)server.arg("plain").length(), (int)zipStaged.size());
-    logLine(lm);
+    logLineL(2, lm);
   }
   for (const String &n : sel) {
     const char *dir = nullptr;
@@ -6120,7 +6376,7 @@ static void webZipSelected() {
 static void webIndex() {
   char lm[64];
   snprintf(lm, sizeof(lm), "WLAN: Anfrage GET / (Startseite) von %s", server.client().remoteIP().toString().c_str());
-  logLine(lm);
+  logLineL(2, lm);
   std::vector<FileInfo> shots, logs, gpx;
   listDir(SHOT_DIR, "shot_", ".jpg", shots);
   listDir(LOG_DIR, "rs41_log_", ".txt", logs);
@@ -6213,19 +6469,35 @@ static void webCfgPage() {
                      "wirken sofort, ohne Neustart, und &uuml;berstehen auch einen Neustart (liegen auf der "
                      "SD-Karte als /config.ini). Farben (COL_...) als normales RGB888 (0xRRGGBB, wie in "
                      "jedem Colorpicker).</p>");
-  server.sendContent("<form method=POST action=\"/cfgsave\"><textarea name=ini spellcheck=false>");
+  server.sendContent("<form id=fs method=POST action=\"/cfgsave\"><textarea name=ini spellcheck=false>");
   server.sendContent(esc);
   server.sendContent("</textarea><br><button type=submit>Speichern &amp; sofort anwenden</button>"
                      "<a href=\"/cfgdl\"><button type=button>Herunterladen</button></a></form>");
   server.sendContent("<h3>Oder Datei hochladen</h3>"
-                     "<form method=POST action=\"/cfgup\" enctype=\"multipart/form-data\">"
+                     "<form id=fu method=POST action=\"/cfgup\" enctype=\"multipart/form-data\">"
                      "<input type=file name=f accept=\".ini,.txt\"> "
                      "<button type=submit>Hochladen &amp; anwenden</button></form>");
   server.sendContent("<h3>Falls etwas schiefging</h3>"
-                     "<form method=POST action=\"/cfgreset\">"
+                     "<form id=fr method=POST action=\"/cfgreset\">"
                      "<button type=submit onclick=\"return confirm('Wirklich ALLE Werte sofort auf die "
                      "Werkseinstellungen (Compile-Defaults aus settings.h) zuruecksetzen? Eigene Anpassungen "
                      "gehen dabei verloren.')\">Auf Werkseinstellungen zur&uuml;cksetzen</button></form>");
+  // v6.15.0: Speichern/Hochladen/Zuruecksetzen per fetch, nur ein Kurzhinweis (kein Extra-Klick, kein Seitenwechsel);
+  // nach Upload/Reset wird die Seite neu geladen, damit das Textfeld den neuen Stand zeigt.
+  server.sendContent("<div id=tst style=\"display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:16px;"
+                     "background:#222;border:1px solid #6cf;border-radius:6px;padding:8px 16px\"></div>"
+                     "<script>var tt=null;function note(t,ok){var d=document.getElementById('tst');d.textContent=t;"
+                     "d.style.color=ok?'#8f8':'#f88';d.style.display='block';if(tt)clearTimeout(tt);"
+                     "tt=setTimeout(function(){d.style.display='none';},3500);}"
+                     "function hook(id,body,reload){var f=document.getElementById(id);f.addEventListener('submit',function(e){"
+                     "if(e.defaultPrevented)return;e.preventDefault();var b=body(f);"
+                     "fetch(f.action+'?a=1',{method:'POST',body:b}).then(function(r){return r.text();}).then(function(t){"
+                     "var ok=t.indexOf('OK:')==0;note(t.replace(/^(OK|ERR):/,''),ok);if(ok&&reload)setTimeout(function(){location.reload();},1200);})"
+                     ".catch(function(){note('Fehler: keine Verbindung',false);});});}"
+                     "hook('fs',function(f){return new URLSearchParams(new FormData(f));},false);"
+                     "hook('fu',function(f){return new FormData(f);},true);"
+                     "hook('fr',function(f){return new URLSearchParams();},true);"
+                     "</script>");
   server.sendContent(String("<p style=\"color:#666;font-size:12px;margin-top:20px\">T-Deck RS41 v") + FW_VERSION + "</p></body></html>");
   server.sendContent("");
 }
@@ -6239,6 +6511,10 @@ static void webCfgResult(bool ok, int applied, int unknown) {
   String msg = ok ? (String("Gespeichert und angewendet: ") + applied + " Wert(e)"
                      + (unknown ? (String(", ") + unknown + " Zeile(n) nicht erkannt") : String("")))
                   : String("Fehler: SD-Karte nicht bereit, nichts gespeichert.");
+  if (server.hasArg("a")) {                       // v6.15.0: Aufruf per JS (fetch) -> nur der Hinweistext, kein Seitenwechsel
+    server.send(200, "text/plain; charset=utf-8", String(ok ? "OK:" : "ERR:") + msg);
+    return;
+  }
   server.send(200, "text/html; charset=utf-8",
               String("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
                      "</head><body style=\"font-family:sans-serif;background:#000;color:#fff;margin:12px\">")
@@ -6670,7 +6946,7 @@ static void webNotFound() {
   char m[104];
   snprintf(m, sizeof(m), "WLAN: Anfrage %s von %s (unbekannter Pfad -> 404)", server.uri().c_str(),
            server.client().remoteIP().toString().c_str());
-  logLine(m);
+  logLineL(2, m);
   server.send(404, "text/plain", "nicht gefunden");
 }
 
@@ -6678,6 +6954,8 @@ static void webNotFound() {
 // (menuValue()/menuStep()/menuApplyTyped()/editBuf, die sie benutzen, sind dort erst definiert) --
 // ohne diese Deklarationen hier waeren sie an dieser Stelle (server.on()-Registrierung) noch unbekannt.
 static void webMenu();
+static void webMenuRowsPage();
+static void webKey();
 static void webMenuStep();
 static void webMenuSet();
 static void webMenuSelect();
@@ -6718,6 +6996,8 @@ static void wifiServerStart() {
     server.on("/apple-touch-icon.png", webAppleIcon);
     server.on("/apple-touch-icon-precomposed.png", webAppleIcon);
     server.on("/menu", webMenu);
+    server.on("/mrows", webMenuRowsPage);
+    server.on("/key", webKey);
     server.on("/mstep", webMenuStep);
     server.on("/mset", webMenuSet);
     server.on("/mselect", webMenuSelect);
@@ -6784,6 +7064,7 @@ static void wifiStopAll() {
 
 // mode: 0 aus, 1 Heimnetz (Station), 2 eigener Zugangspunkt
 static void wifiSet(int mode) {
+  wifiRetryOn = false;                    // jede (auch automatische) WLAN-Umschaltung beendet einen laufenden Retry; Aufrufer setzt ihn bei Bedarf neu
   wifiStopAll();
   wifiMode = (uint8_t)mode;
   char m[120];
@@ -6808,11 +7089,35 @@ static void wifiSet(int mode) {
   }
 }
 
+// v6.12.0: Heimnetz nach Verlust bzw. gescheitertem Start regelmaessig neu versuchen: erste Wartezeit 10 s, danach jeweils
+// verdoppelt bis WIFI_RETRY_MAX_MS (Default 10 min; 0 = nie neu versuchen). Nur wenn ein Heimnetz bekannt ist und das WLAN nicht
+// absichtlich per Menue umgeschaltet wurde (wifiSet() setzt wifiRetryOn zurueck). Zwischen den Versuchen ist das WLAN-Radio aus.
+static void wifiRetryArm(bool first) {
+  if (!wifiSsid[0] || WIFI_RETRY_MAX_MS == 0) { wifiRetryOn = false; return; }
+  if (first) wifiRetryDelayMs = 10000;
+  else wifiRetryDelayMs *= 2;
+  if (wifiRetryDelayMs > WIFI_RETRY_MAX_MS) wifiRetryDelayMs = WIFI_RETRY_MAX_MS;
+  wifiRetryNextMs = millis() + wifiRetryDelayMs;
+  wifiRetryOn = true;
+  char m[72];
+  snprintf(m, sizeof(m), "WLAN: naechster Verbindungsversuch in %lu s", (unsigned long)(wifiRetryDelayMs / 1000));
+  logLine(m);
+}
+
+static void wifiRetryTick() {
+  if (!wifiRetryOn || wifiOn || wifiConnecting) return;
+  if ((int32_t)(millis() - wifiRetryNextMs) < 0) return;
+  wifiSet(1);                              // setzt wifiRetryOn zurueck ...
+  wifiRetryOn = true;                      // ... hier wieder an: scheitert der Versuch, geht es mit doppelter Wartezeit weiter
+}
+
 // Verbindungsaufbau zum Heimnetz begleiten (wird laufend aufgerufen)
 static void wifiTick() {
   if (!wifiConnecting) return;
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnecting = false;
+    wifiRetryOn = false;                                     // verbunden: Retry beendet, Wartezeit beginnt beim naechsten Verlust wieder bei 10 s
+    wifiRetryDelayMs = 10000;
     wifiBootSeq = false;                                     // Boot-Sequenz (falls aktiv) erfolgreich abgeschlossen,
                                                               // siehe wifiBootSeq-Deklaration -- bleibt jetzt an,
                                                               // solange die Verbindung steht (wifiLinkTick())
@@ -6822,6 +7127,7 @@ static void wifiTick() {
     snprintf(m, sizeof(m), "WLAN Heimnetz verbunden: http://%s oder http://%s.local", WiFi.localIP().toString().c_str(), WIFI_HOST);
     logLine(m);
   } else if (millis() - wifiConnMs > WIFI_BOOT_HOME_TIMEOUT_MS) {
+    bool wasRetry = wifiRetryOn;
     wifiConnecting = false;
     if (wifiBootSeq) {                                       // Teil der Boot-Sequenz (Feature v4.88): statt ganz
       logLine("WLAN: Heimnetz nicht erreichbar, oeffne Boot-Zugangspunkt");   // aus jetzt die Boot-Hotspot-Phase
@@ -6830,6 +7136,7 @@ static void wifiTick() {
     } else {
       logLine("WLAN: Heimnetz nicht erreichbar, WLAN aus");   // ausserhalb der Boot-Sequenz (z. B. spaeter manuell per
       wifiSet(0);                                             // Menue W erneut versucht): wie bisher kein automatischer AP
+      if (wasRetry) wifiRetryArm(false);                      // automatischer Retry gescheitert: naechster Versuch mit doppelter Wartezeit
     }
   }
 }
@@ -7258,7 +7565,7 @@ static void findTrackLoad(const char *idStr) {
   char m[112];
   snprintf(m, sizeof(m), "Fund-Zeit: Spur %s einlesen %lu ms, 1 Durchgang (%d Punkte in Datei, %d geladen)",
            idStr, (unsigned long)(millis() - t0), total, findTrackN);
-  logLine(m);
+  logLineL(2, m);
 }
 
 // Liste der zur Auswahl stehenden Sonden (neueste zuerst). Schneller Weg: die in dieser Sitzung bereits
@@ -7285,7 +7592,7 @@ static void findPickScan() {
     char m[96];
     snprintf(m, sizeof(m), "Fund-Zeit: RAM-Liste %lu ms (%d Kandidaten, %d Treffer)",
              (unsigned long)(millis() - t0), findPickRecentN, findPickN);
-    logLine(m);
+    logLineL(2, m);
     return;
   }
   std::vector<FileInfo> v;
@@ -7319,7 +7626,7 @@ static void findPickScan() {
   char m[96];
   snprintf(m, sizeof(m), "Fund-Zeit: SD-Scan %lu ms (listDir), Rest %lu ms, %d Sonden gefunden",
            (unsigned long)(t1 - t0), (unsigned long)(millis() - t1), findPickN);
-  logLine(m);
+  logLineL(2, m);
 }
 
 // Position fuer den Listeneintrag idx ermitteln (siehe Kommentar oben: live, falls das die gerade laufende
@@ -7338,7 +7645,7 @@ static bool findPickLoad(int idx, double &lat, double &lon, float &alt) {
   char m[96];
   snprintf(m, sizeof(m), "Fund-Zeit: findPickLoad gesamt %lu ms (Spur %lu ms, Position %lu ms)",
            (unsigned long)(millis() - t0), (unsigned long)(t1 - t0), (unsigned long)(millis() - t1));
-  logLine(m);
+  logLineL(2, m);
   return ok;
 }
 
@@ -7412,7 +7719,7 @@ static bool findPick(char *serial, double &lat, double &lon, float &alt) {
   char m[112];
   snprintf(m, sizeof(m), "Fund-Zeit gesamt bis zur Anzeige: %lu ms (Scan %lu ms, Laden %lu ms, Karte zeichnen %lu ms)",
            (unsigned long)(millis() - t0), (unsigned long)(t1 - t0), (unsigned long)(t2 - t1), (unsigned long)(millis() - t2));
-  logLine(m);
+  logLineL(2, m);
   bool confirmed = false;
   while (true) {
     gpsPoll();
@@ -7755,6 +8062,7 @@ static void wifiLinkTick() {
   if (millis() - wifiLostMs > WIFI_LOST_MS) {
     logLine("WLAN: Heimnetz-Verbindung verloren (ausser Reichweite?), WLAN aus");
     wifiSet(0);
+    wifiRetryArm(true);                                     // v6.12.0: regelmaessig neu versuchen (10 s, 20 s, 40 s ... bis WIFI_RETRY_MAX_MS)
   }
 }
 
@@ -7782,6 +8090,7 @@ static void wifiBootApTick() {
     logLine("WLAN: Boot-Zugangspunkt-Zeitfenster abgelaufen, WLAN aus");
     wifiSet(0);
     wifiBootSeq = false;
+    wifiRetryArm(true);                                     // v6.12.0: Heimnetz (falls bekannt) danach regelmaessig neu versuchen
   }
 }
 
@@ -7838,6 +8147,8 @@ static void doShutdown() {
   logLine("### Geordnetes Herunterfahren");
   gpxPersistResumeInfo();                          // frischester Zeitstempel fuer die Karenzzeit beim naechsten Start
   gpxDrainAll();                                   // GPX-Zwischenspeicher noch sichern
+  if (nightMode) nightSet(false);                  // Anzeige wieder an, damit der Ladebalken sichtbar ist
+  gpsDbSaveBlocking();                             // GPS-Datenbank (Almanach/Ephemeriden) noch sichern
   if (wifiOn) wifiStopAll();
   radio.standby();
   tft.fillScreen(ST77XX_BLACK);
@@ -7974,7 +8285,7 @@ static void menuStep(int i, int dir, bool big) {
       double cur = mapManual ? manZoom : (shownZ > 0 ? shownZ : (double)MAP_IDLE_Z);
       double nz = cur + dir * 1.0;
       if (nz < (double)MAP_MIN_Z - 1e-9) {
-        if (mapManual) logLine("Karte: automatisch (Zoomtaste unter Minimum)");
+        if (mapManual) logLineL(2, "Karte: automatisch (Zoomtaste unter Minimum)");
         mapManual = false;
       } else {
         enterManual("Zoomtaste");
@@ -8371,10 +8682,83 @@ static bool menuWebSkip(int i) { return i == MI_SHUTDOWN || i == MI_NET || i == 
 // ASCII, weil es unveraendert auch die Geraete-Anzeige beschriftet).
 static String menuNameHtml(int i) { return i == MI_LAND ? String("Landeh&ouml;he") : String(menuDisplayName(i)); }
 
+// Antwort auf Bedienaktionen der Weboberflaeche (v6.15.0): mit Parameter a=1 (JavaScript-Knoepfe, kein Seitenwechsel)
+// nur "ok" bzw. "pm:<code>" als Klartext, ohne a=1 wie bisher Weiterleitung auf /menu (Aufruf per Adresszeile).
+static void webAck(const char *pm) {
+  if (server.hasArg("a")) {
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "text/plain", pm ? (String("pm:") + pm) : String("ok"));
+    return;
+  }
+  server.sendHeader("Location", pm ? (String("/menu?pm=") + pm) : String("/menu"));
+  server.send(303, "text/plain", "");
+}
+
+// Zeilen der Menuetabelle (v6.15.0): einmal beim Aufbau von /menu, danach per JS ueber /mrows neu geladen (ohne Seitenwechsel).
+static void webMenuRows() {
+  for (int i = 0; i < MI_COUNT; i++) {
+    if (menuWebSkip(i)) continue;
+    char val[24];
+    menuValue(i, val, sizeof(val));
+    String row = "<tr><td>" + menuNameHtml(i) + "</td><td>" + String(val) + "</td><td>";
+    String qs = "i=" + String(i);
+    int nOpt = menuOptionCount(i);
+    if (menuIsNumeric(i)) {
+      row += "<form onsubmit=\"return setv(this)\">"
+             "<input type=hidden name=i value=\"" + String(i) + "\">"
+             "<input type=text name=v placeholder=\"Wert\">"
+             "<button type=submit>Setzen</button></form> "
+             "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=-1&big=1');return false;\">&laquo;</a>"
+             "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=-1&big=0');return false;\">-</a>"
+             "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=1&big=0');return false;\">+</a>"
+             "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=1&big=1');return false;\">&raquo;</a>";
+    } else if (nOpt > 0) {
+      int cur = menuCurrentIndex(i);
+      row += "<select onchange=\"act('/mselect?" + qs + "&idx='+this.value)\">";
+      for (int k = 0; k < nOpt; k++) {
+        char lbl[24];
+        menuOptionLabel(i, k, lbl, sizeof(lbl));
+        row += "<option value=\"" + String(k) + "\"" + (k == cur ? " selected" : "") + ">" + String(lbl) + "</option>";
+      }
+      row += "</select>";
+    } else {
+      row += "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=-1&big=0');return false;\">-</a>"
+             "<a class=b href=\"#\" onclick=\"act('/mstep?" + qs + "&dir=1&big=0');return false;\">+</a>";
+    }
+    row += "</td></tr>";
+    server.sendContent(row);
+  }
+}
+
+// Geraetetasten von der Weboberflaeche aus (v6.16.1): /key?k=<name> legt die Taste wie einen Tastendruck am Geraet in die Eingabe
+// (pendingKeyChar, wird von pollInput() geliefert). Nur eine feste Auswahl; Q/H/Enter (Dialoge) bewusst nicht.
+static void webKey() {
+  String k = server.arg("k");
+  int code = 0;
+  if (k == "up") code = EV_UP; else if (k == "down") code = EV_DOWN; else if (k == "click") code = EV_CLICK;
+  else if (k == "bs") code = 0x08;
+  else if (k.length() == 1 && strchr("n$cu0mlr", k[0])) code = k[0];
+  if (code && !pendingKeyChar) {
+    pendingKeyChar = code;
+    char m[64];
+    snprintf(m, sizeof(m), "WLAN: Taste \"%s\" per Weboberflaeche von %s", k.c_str(), server.client().remoteIP().toString().c_str());
+    logLineL(2, m);
+  }
+  webAck(nullptr);
+}
+
+static void webMenuRowsPage() {
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "text/html; charset=utf-8", "");
+  webMenuRows();
+  server.sendContent("");
+}
+
 static void webMenu() {
   char lm[64];
   snprintf(lm, sizeof(lm), "WLAN: Anfrage GET /menu von %s", server.client().remoteIP().toString().c_str());
-  logLine(lm);
+  logLineL(2, lm);
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/html; charset=utf-8", "");
   server.sendContent("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
@@ -8433,11 +8817,25 @@ static void webMenu() {
   }
   server.sendContent(String("<p><a href=\"/\">&larr; Zur Startseite</a> -- "
                      "<a href=\"/cfg\">Einstellungen (config.ini)</a></p>"
-                     "<p><a class=b href=\"/vspace\">Ansicht wechseln (Space)</a> "
-                     "<a class=b href=\"/vfocus\">Zentrieren/Fokus (R)</a> "
-                     "<a class=b href=\"/vsendpos\">Eigene Position senden</a> "
+                     "<p><a class=b href=\"#\" onclick=\"act('/vspace');return false;\">Ansicht wechseln (Space)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/vfocus');return false;\">Zentrieren/Fokus (R)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/vsendpos');return false;\">Eigene Position senden</a> "
                      "<a class=b href=\"#\" onclick=\"webNav('/vzoom?d=1');return false;\">Zoom +</a> "
-                     "<a class=b href=\"#\" onclick=\"webNav('/vzoom?d=-1');return false;\">Zoom &minus;</a></p>") +
+                     "<a class=b href=\"#\" onclick=\"webNav('/vzoom?d=-1');return false;\">Zoom &minus;</a></p>"
+                     // Weitere Geraetetasten (v6.16.1), siehe webKey()
+                     "<p><a class=b href=\"#\" onclick=\"act('/key?k=up');return false;\">&uarr;</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=down');return false;\">&darr;</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=click');return false;\">Klick</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=bs');return false;\">R&uuml;cktaste</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=m');return false;\">Kartenart (M)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=l');return false;\">LoRa-Pause (L)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=c');return false;\">Screenshot (C)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=u');return false;\">GPX sichern (U)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=$');return false;\">Ton (&#36;)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=0');return false;\">Trackball-Sperre (0)</a> "
+                     "<a class=b href=\"#\" onclick=\"act('/key?k=n');return false;\">Nachtmodus (N)</a></p>"
+                     "<div id=tst style=\"display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:16px;"
+                     "background:#222;border:1px solid #6cf;border-radius:6px;padding:8px 16px;z-index:20\"></div>") +
                      pmNotice +
                      String(
                      // Stationspopup-Markup (siehe CSS oben/JS unten): leer bis showStationPopup() es befuellt
@@ -8470,11 +8868,26 @@ static void webMenu() {
                      // Karte auf dem Live-Bild ziehen (Maus/Finger) und mit dem Mausrad zoomen (nur in der Kartenansicht wirksam, siehe webViewPan()).
                      // Das Neuzeichnen am Geraet dauert etwas, deshalb das Bild nach 1,5 s und 4 s nachladen.
                      "function webNav(u){fetch(u).then(function(){setTimeout(loadLive,1500);setTimeout(loadLive,4000);});}"
+                     // Knoepfe ohne Seitenwechsel (v6.15.0): Aktion per fetch (a=1 -> nur "ok"/"pm:code"), danach Kurzhinweis,
+                     // Menuetabelle und Bild neu laden.
+                     "var tt=null;function note(t,c){var d=document.getElementById('tst');d.textContent=t;d.style.color=c||'#fff';d.style.display='block';"
+                     "if(tt)clearTimeout(tt);tt=setTimeout(function(){d.style.display='none';},3000);}"
+                     "var PM={sent:['Eigene Position gesendet.','#8f8'],nofix:['Nicht gesendet: kein GPS-Fix.','#fa0'],off:['Nicht gesendet: LoRa-Beacon aus.','#fa0']};"
+                     "function act(u){fetch(u+(u.indexOf('?')<0?'?':'&')+'a=1').then(function(r){return r.text();}).then(function(t){"
+                     "if(t.indexOf('pm:')==0){var m=PM[t.slice(3)];if(m)note(m[0],m[1]);}loadRows();setTimeout(loadLive,800);setTimeout(loadLive,2500);"
+                     "setTimeout(loadAlt,1500);}).catch(function(){note('Fehler: keine Verbindung','#f88');});}"
+                     "function setv(f){var v=f.v.value;if(v==='')return false;act('/mset?i='+f.i.value+'&v='+encodeURIComponent(v));f.v.value='';return false;}"
+                     "function loadRows(){fetch('/mrows').then(function(r){return r.text();}).then(function(h){"
+                     "var a=document.activeElement;if(a&&a.tagName=='INPUT'&&a.value!=='')return;"
+                     "document.getElementById('mt').innerHTML=h;}).catch(function(){});}"
                      "(function(){var im=document.getElementById('live'),sx=0,sy=0,dn=false;"
                      "im.addEventListener('pointerdown',function(e){dn=true;sx=e.clientX;sy=e.clientY;im.setPointerCapture(e.pointerId);e.preventDefault();});"
                      "im.addEventListener('pointerup',function(e){if(!dn)return;dn=false;var k=320/im.clientWidth,dx=Math.round((e.clientX-sx)*k),dy=Math.round((e.clientY-sy)*k);"
                      "if(Math.abs(dx)+Math.abs(dy)>3)webNav('/vpan?dx='+dx+'&dy='+dy);});"
-                     "im.addEventListener('wheel',function(e){e.preventDefault();webNav('/vzoom?d='+(e.deltaY<0?1:-1));},{passive:false});})();"
+                     // Mausrad: Rollwerte sammeln, ab 60 Einheiten genau EINE Zoomstufe, danach 350 ms Pause (Trackpad/Rad liefern
+                     // viele Einzelereignisse -- vorher sprang die Karte dadurch von Zoom 6 bis 19).
+                     "var wa=0,wt=0;im.addEventListener('wheel',function(e){e.preventDefault();var n=Date.now();if(n<wt)return;"
+                     "wa+=e.deltaY*(e.deltaMode==1?33:1);if(Math.abs(wa)<60)return;var d=wa<0?1:-1;wa=0;wt=n+350;webNav('/vzoom?d='+d);},{passive:false});})();"
                      // Stationspopup wie am Geraet (Klick/R in der Stationsliste, siehe handleInput()): zeigt
                      // Rufzeichen, km/Pegel/Alter und die Zusatzinfo (txt, von webAltStat() aus aprsComment[]
                      // mitgeliefert). lastSt[] haelt die zuletzt geladene Stationsliste fuer den Klick-Handler.
@@ -8482,7 +8895,7 @@ static void webMenu() {
                      "document.getElementById('spCall').textContent=s.c;"
                      "document.getElementById('spMeta').textContent=s.km.toFixed(1)+' km, '+s.rssi+' dBm, SNR '+s.snr;"
                      "document.getElementById('spTxt').textContent=s.txt||'(keine Zusatzinfo)';"
-                     "document.getElementById('spFocus').href='/vstatfocus?i='+s.i;"
+                     "document.getElementById('spFocus').onclick=function(){closeStatPopup();act('/vstatfocus?i='+s.i);return false;};"
                      "document.getElementById('statpop').style.display='block';}"
                      "function closeStatPopup(){document.getElementById('statpop').style.display='none';}"
                      "function loadAlt(){fetch('/malt').then(function(r){return r.json();}).then(function(d){"
@@ -8539,7 +8952,7 @@ static void webMenu() {
                      "ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.fillText(d.cur+' m',10,c.height-2);"
                      "}}}).catch(function(){});}"
                      "function setRefresh(s){if(refTimer){clearInterval(refTimer);refTimer=null;}s=parseInt(s);"
-                     "if(s>0)refTimer=setInterval(function(){loadLive();loadAlt();},s*1000);}"
+                     "if(s>0)refTimer=setInterval(function(){loadLive();loadAlt();loadRows();},s*1000);}"
                      "function beep(){try{var ctx=new (window.AudioContext||window.webkitAudioContext)();"
                      "function tone(t){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=880;"
                      "o.connect(g);g.connect(ctx.destination);g.gain.value=0.2;"
@@ -8549,39 +8962,8 @@ static void webMenu() {
                      "if(lastSeq!==null&&d.seq!==lastSeq)beep();lastSeq=d.seq;}).catch(function(){});}"
                      "setRefresh(30);loadAlt();setInterval(pollStat,5000);pollStat();"
                      "</script>"
-                     "<h2>Men&uuml;</h2><table>"));
-  for (int i = 0; i < MI_COUNT; i++) {
-    if (menuWebSkip(i)) continue;
-    char val[24];
-    menuValue(i, val, sizeof(val));
-    String row = "<tr><td>" + menuNameHtml(i) + "</td><td>" + String(val) + "</td><td>";
-    String qs = "i=" + String(i);
-    int nOpt = menuOptionCount(i);
-    if (menuIsNumeric(i)) {
-      row += "<form method=get action=\"/mset\">"
-             "<input type=hidden name=i value=\"" + String(i) + "\">"
-             "<input type=text name=v placeholder=\"Wert\">"
-             "<button type=submit>Setzen</button></form> "
-             "<a class=b href=\"/mstep?" + qs + "&dir=-1&big=1\">&laquo;</a>"
-             "<a class=b href=\"/mstep?" + qs + "&dir=-1&big=0\">-</a>"
-             "<a class=b href=\"/mstep?" + qs + "&dir=1&big=0\">+</a>"
-             "<a class=b href=\"/mstep?" + qs + "&dir=1&big=1\">&raquo;</a>";
-    } else if (nOpt > 0) {
-      int cur = menuCurrentIndex(i);
-      row += "<select onchange=\"location.href='/mselect?" + qs + "&idx='+this.value\">";
-      for (int k = 0; k < nOpt; k++) {
-        char lbl[24];
-        menuOptionLabel(i, k, lbl, sizeof(lbl));
-        row += "<option value=\"" + String(k) + "\"" + (k == cur ? " selected" : "") + ">" + String(lbl) + "</option>";
-      }
-      row += "</select>";
-    } else {
-      row += "<a class=b href=\"/mstep?" + qs + "&dir=-1&big=0\">-</a>"
-             "<a class=b href=\"/mstep?" + qs + "&dir=1&big=0\">+</a>";
-    }
-    row += "</td></tr>";
-    server.sendContent(row);
-  }
+                     "<h2>Men&uuml;</h2><table id=mt>"));
+  webMenuRows();
   server.sendContent(String("</table><p style=\"color:#666;font-size:12px;margin-top:20px\">T-Deck RS41 v") + FW_VERSION + "</p></body></html>");
   server.sendContent("");
 }
@@ -8597,10 +8979,9 @@ static void webMenuStep() {
     char m[96];
     snprintf(m, sizeof(m), "WLAN: Menue \"%s\" per Weboberflaeche geaendert (%s%s) von %s", menuDisplayName(i),
              dir > 0 ? "+" : "-", big ? " gross" : "", server.client().remoteIP().toString().c_str());
-    logLine(m);
+    logLineL(2, m);
   }
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  webAck(nullptr);
 }
 
 // Genauer Wert fuer ein Zahlenfeld, wie das Eintippen am Geraet (editBuf/editLen werden nur kurz fuer
@@ -8618,12 +8999,11 @@ static void webMenuSet() {
       char m[104];
       snprintf(m, sizeof(m), "WLAN: Menue \"%s\" per Weboberflaeche auf \"%s\" gesetzt von %s", menuDisplayName(i), editBuf,
                server.client().remoteIP().toString().c_str());
-      logLine(m);
+      logLineL(2, m);
     }
     editLen = 0;
   }
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  webAck(nullptr);
 }
 
 // Aktueller Bildschirminhalt als JPEG, direkt aus dem Bildpuffer kodiert (keine SD-Karte noetig) --
@@ -8744,10 +9124,9 @@ static void webMenuSelect() {
     char m[96];
     snprintf(m, sizeof(m), "WLAN: Menue \"%s\" per Weboberflaeche auf Option %d gesetzt von %s", menuDisplayName(i), idx,
              server.client().remoteIP().toString().c_str());
-    logLine(m);
+    logLineL(2, m);
   }
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  webAck(nullptr);
 }
 
 // Taste Space/Trackball-Klick (Ansicht wechseln Text -> Karte -> Hoehentrack/Stationen) von der Weboberflaeche aus.
@@ -8755,9 +9134,8 @@ static void webViewSpace() {
   cycleView();
   char m[64];
   snprintf(m, sizeof(m), "WLAN: Ansicht per Weboberflaeche gewechselt von %s", server.client().remoteIP().toString().c_str());
-  logLine(m);
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  logLineL(2, m);
+  webAck(nullptr);
 }
 
 // Taste R (Zentrieren/naechster Fokus in der Kartenansicht) von der Weboberflaeche aus -- siehe
@@ -8766,9 +9144,8 @@ static void webViewFocus() {
   focusCycleOrRecenter();
   char m[64];
   snprintf(m, sizeof(m), "WLAN: Fokus/Zentrieren per Weboberflaeche von %s", server.client().remoteIP().toString().c_str());
-  logLine(m);
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  logLineL(2, m);
+  webAck(nullptr);
 }
 
 // Karte per Maus/Finger verschieben (Ziehen auf dem Live-Bild in /menu) bzw. zoomen (Mausrad oder Knoepfe): dx/dy sind
@@ -8791,6 +9168,7 @@ static void webViewPan() {
 static void webViewZoom() {
   if (mapMode && gfxView == 0 && gfxReady()) {
     zoomPend += (server.arg("d").toInt() > 0) ? 1.0 : -1.0;     // eine ganze Zoomstufe, wie Taste D/A am Geraet
+    zoomPend = constrain(zoomPend, -2.0, 2.0);                  // v6.15.0: nie mehr als 2 Stufen auf Vorrat
     zoomPendMs = millis();
   }
   server.sendHeader("Cache-Control", "no-store");
@@ -8815,11 +9193,10 @@ static void webViewStatFocus() {
     char m[72];
     snprintf(m, sizeof(m), "WLAN: Fokus auf %s per Weboberflaeche von %s", aprsCall[i],
              server.client().remoteIP().toString().c_str());
-    logLine(m);
+    logLineL(2, m);
     gfxUpdate();
   }
-  server.sendHeader("Location", "/menu");
-  server.send(303, "text/plain", "");
+  webAck(nullptr);
 }
 
 // Eigener Bedienknopf oben auf /menu: eigene Position SOFORT per LoRa-APRS senden -- 1:1 dieselbe Aktion wie
@@ -8846,8 +9223,7 @@ static void webViewSendPos() {
     pm = "off";
   }
   logLine(m);
-  server.sendHeader("Location", String("/menu?pm=") + pm);   // Ergebnis als kurzer Code in der Redirect-URL (siehe
-  server.send(303, "text/plain", "");                        // webMenu()) statt der Logzeile selbst -- vermeidet
+  webAck(pm);                                                // Ergebnis als kurzer Code (siehe webAck()/webMenu())
 }                                                             // URL-Escaping von Freitext in der Location-Kopfzeile.
 
 static void drawMenu(int sel) {
@@ -8959,6 +9335,7 @@ static void runMenu(int startSel = 0) {
                                                                     // Modus ausgeblendet sein -- naechsten sichtbaren nehmen
   editing = false;
   editLen = 0;
+  if (nightMode) nightSet(false);   // Menue im Nachtmodus waere unsichtbar
   menuOpen = true;           // Fix v4.85: siehe Deklaration/Kommentar bei tbLockMode -- haelt Trackball-Sperre
                               // Stufe 1 waehrend des Menues aussen vor
   drawMenu(sel);
@@ -9172,6 +9549,7 @@ static void drawHelpScreen() {
     {"C", "Screenshot"},
     {"U", "GPX-Zwischenspeicher sichern"},
     {"Q", "Sonde gefunden melden"},
+    {"N", "Nachtmodus (Display+Tasten aus/an)"},
     {"L", "LoRa Upload kurz pausieren (nur LoRa-Modus; bildschirmfuellender Countdown/Balken, Piepsen kurz vor Ende, Ruecktaste beendet die Pause vorzeitig)"},
   };
   int y = 16;
@@ -9187,6 +9565,42 @@ static void drawHelpScreen() {
   tft.setTextColor(0x8410);
   tft.setCursor(4, 228);
   tft.print("Beliebige Taste/Klick: zurueck zur Karte");
+}
+
+// Tastenhilfe der LoRa-Stationsliste (Taste H dort, v6.15.0).
+static void drawAprsHelpScreen() {
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_CYAN);
+  tft.setCursor(4, 2);
+  tft.print("Hilfe -- Stationsliste");
+  struct { const char *k, *t; } rows[] = {
+    {"Trackball", "Auswahl hoch/runter"},
+    {"Klick", "Zusatzinfo der Station ein/aus"},
+    {"Ruecktaste", "Auswahl aufheben"},
+    {"R", "auf markierte Station einzoomen"},
+    {"Leertaste", "naechste Ansicht"},
+    {"Enter", "Einstellungsmenue"},
+    {"N", "Nachtmodus (Display+Tasten aus/an)"},
+    {"0", "Trackball sperren/entsperren"},
+    {"$", "Ton an/aus"},
+    {"C", "Screenshot"},
+    {"U", "GPX-Zwischenspeicher sichern"},
+    {"Q", "Sonde gefunden melden"},
+  };
+  int y = 16;
+  for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+    tft.setTextColor(ST77XX_YELLOW);
+    tft.setCursor(4, y);
+    tft.print(rows[i].k);
+    tft.setTextColor(ST77XX_WHITE);
+    tft.setCursor(112, y);
+    tft.print(rows[i].t);
+    y += 17;
+  }
+  tft.setTextColor(0x8410);
+  tft.setCursor(4, 228);
+  tft.print("Beliebige Taste/Klick: zurueck zur Liste");
 }
 
 // Erklaerung der GPS-Radar-Ansicht (Taste H dort): Farben, Punkte, Kuerzel und Tabellenspalten. Schreibt wie drawHelpScreen() direkt aufs Display.
@@ -9238,8 +9652,8 @@ static void drawRadarHelpScreen() {
 }
 
 // Blockiert, bis eine beliebige Taste oder ein Trackball-Klick kommt, dann zurueck zur Ansicht (showView()).
-static void showHelpScreen(bool radar = false) {
-  if (radar) drawRadarHelpScreen(); else drawHelpScreen();
+static void showHelpScreen(int kind = 0) {      // 0 Karte, 1 GPS-Radar, 2 Stationsliste (LoRa)
+  if (kind == 1) drawRadarHelpScreen(); else if (kind == 2) drawAprsHelpScreen(); else drawHelpScreen();
   while (true) {
     gpsPoll();
     int e = pollInput();
@@ -9350,6 +9764,7 @@ static void handleInput() {
   ownTrailTick();
   gpxTick();
   wifiLinkTick();
+  wifiRetryTick();
   wifiIdleTick();
   wifiBootApTick();
   recoveryQueueTick();
@@ -9504,15 +9919,9 @@ static void handleInput() {
       return;
     }
   }
-  if (c == 'n') {                                 // Testtaste: grosse Statuszeile auf der Karte erzwingen, ohne
-                                                     // tatsaechlich > 8 km/h fahren zu muessen (bleibt rein im RAM,
-                                                     // kein Eintrag in Settings oder SD-Log)
-    dbgSpeedOverride = (dbgSpeedOverride >= 0.0f) ? -1.0f : (OWN_SPEED_BIG_KMH + 12.0f);
-    dbgSpeedUntilMs = millis() + DBG_SPEED_TEST_MS;
-    char v[24];
-    if (dbgSpeedOverride >= 0.0f) snprintf(v, sizeof(v), "%.0f km/h, 30 s", dbgSpeedOverride);
-    else snprintf(v, sizeof(v), "aus");
-    toast("Test-Tempo", v);
+  if (c == 'n') {                                 // Nachtmodus: Display + Tastatur komplett abdunkeln bzw. zurueck (v6.15.0,
+    nightSet(!nightMode);                         // ersetzt die fruehere Testtaste "Test-Tempo")
+    if (!nightMode) toast("Nachtmodus", "aus");   // beim Einschalten waere die Meldung unsichtbar
     return;
   }
   if (c == 'c') {                                 // Screenshot des aktuellen Bildschirms
@@ -9574,7 +9983,11 @@ static void handleInput() {
     return;
   }
   if (c == 'h' && mapMode && gfxView == 2) {      // GPS-Radar: Erklaerung der Farben/Kuerzel/Spalten (v6.9.0)
-    showHelpScreen(true);
+    showHelpScreen(1);
+    return;
+  }
+  if (c == 'h' && mapMode && gfxView == 1 && radioMode == 1) {   // Stationsliste: Tastenhilfe (v6.15.0)
+    showHelpScreen(2);
     return;
   }
   // Fix v4.87: der bisherige Fallback hier ("sonst: Buchstabe oeffnet das Menue, Punkt ist schon gewaehlt")
@@ -10103,7 +10516,7 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     char m[128];
     if (viaCall) snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s ueber %s)", call, lat, lon, kindTxt[kind], viaCall);
     else snprintf(m, sizeof(m), "LoRa-APRS: %s bei %.5f %.5f (%s)", call, lat, lon, kindTxt[kind]);
-    logLine(m);
+    logLineL(isNew ? 0 : 2, m);
     if (isNew) aprsNewStationBeep(kind);
     return true;
   }
@@ -10122,7 +10535,7 @@ static bool aprsStoreFromInfo(const char *call, const char *info, const char *vi
     char m[144];
     if (viaCall) snprintf(m, sizeof(m), "LoRa-APRS-Objekt: %s (ueber %s, %s ueber %s) bei %.5f %.5f", objName, call, kindTxt[kind], viaCall, lat, lon);
     else snprintf(m, sizeof(m), "LoRa-APRS-Objekt: %s (ueber %s, %s) bei %.5f %.5f", objName, call, kindTxt[kind], lat, lon);
-    logLine(m);
+    logLineL(isNew ? 0 : 2, m);
     if (isNew) aprsNewStationBeep(kind);
     return true;
   }
@@ -10201,12 +10614,12 @@ static void aprsPoll() {
         char m[180];
         snprintf(m, sizeof(m), "LoRa-APRS RX #%lu (nicht geparst): %u Byte, RSSI %.1f dBm, SNR %.1f dB: \"%s\"",
                  (unsigned long)aprsRxTotal, (unsigned)len, rssi, snr, prev);
-        logLine(m);
+        logLineL(1, m);
       }
     } else {
       char m[64];
       snprintf(m, sizeof(m), "LoRa-APRS RX: CRC-/Lesefehler (%d), RSSI %.1f dBm, SNR %.1f dB", st, rssi, snr);
-      logLine(m);
+      logLineL(1, m);
     }
   }
   radio.startReceive();
@@ -10287,7 +10700,7 @@ static bool aprsSendBeacon() {
   // damit auf einen Blick klar ist, mit welcher "Fahrzeugkennung" (Stationaer/Fussgaenger/Fahrrad/Bus) gerade
   // gesendet wurde.
   snprintf(m, sizeof(m), "LoRa-APRS gesendet (%s): %s (Status %d)", aprsSymbolNames[aprsSymbolIdx % NSYMBOL], (char *)pkt + 3, st);
-  logLine(m);
+  logLineL(1, m);
   if (beepSec != 0) beepPlay();               // gleicher Empfangston/gleiche Einstellung wie beim Sondenfund (Menue B/MI_BEEP) --
                                                 // "aus" bleibt stumm, sonst piept jeder gesendete eigene Beacon einmal
   rxFlag = false;
@@ -10463,7 +10876,7 @@ bool trackSonde(float fMHz) {
       if (stOk && strncmp(sid, filterId, 8) != 0) {          // fremde Sonde erkannt
         char m[64];
         snprintf(m, sizeof(m), "Fremde Sonde %s bei %.3f MHz ignoriert (Filter %s)", sid, fMHz, filterId);
-        logLine(m);
+        logLineL(1, m);
         foreignF = fMHz;
         foreignUntil = millis() + FILTER_FOREIGN_BLOCK_MS;
         return false;                             // zum naechsten Kandidaten
@@ -10636,7 +11049,7 @@ bool trackSonde(float fMHz) {
           int rn = contOk ? CAP3_LEN : CAP2_LEN;
           for (int i = 0; i < rn; i++) { snprintf(hb, sizeof(hb), "%02X", rr[i]); m += hb; }
         }
-        logLine(m.c_str());
+        logLineL(2, m.c_str());
       }
     }
     {
@@ -10667,7 +11080,7 @@ bool trackSonde(float fMHz) {
         if (mapManual) {
           char m[64];
           snprintf(m, sizeof(m), "Karte: automatisch (%s)", firstPos ? "erste Sondenposition" : "neue Sonden-ID");
-          logLine(m);
+          logLineL(2, m);
         }
         if (stOk) { strncpy(viewIdSeen, sid, 8); viewIdSeen[8] = 0; }
         predVelInit = false;                        // neue Sonde: Glaettung fuer die Landevorhersage neu anlaufen lassen
@@ -10720,7 +11133,7 @@ bool trackSonde(float fMHz) {
       if (havePos) n += snprintf(ln + n, sizeof(ln) - n, " %.2fkm", haversineKm(hl, ho, lat, lon));
       n += snprintf(ln + n, sizeof(ln) - n, " Bat%.2fV/%d%%%s", batV, batPct, batChg ? "+" : "");
       if (lastMapMs) snprintf(ln + n, sizeof(ln) - n, " map%lums", (unsigned long)lastMapMs);
-      logLine(ln);
+      logLineL(2, ln);
     }
     VLOG("--- Zusammenfassung Frame %lu ---\n", (unsigned long)frameCount);
     VLOG("Sonden-ID: %s  Framenr: %d  Statusblock: %s\n", sid, fnr, stOk ? "OK" : "FALSCH");
@@ -11157,7 +11570,7 @@ static void dfmPublish(float fMHz, float pktRssi) {
     if (mapManual) {
       char m[64];
       snprintf(m, sizeof(m), "Karte: automatisch (%s)", firstPos ? "erste Sondenposition" : "neue Sonden-ID");
-      logLine(m);
+      logLineL(2, m);
     }
     if (stOk) { strncpy(viewIdSeen, sid, 8); viewIdSeen[8] = 0; }
     predVelInit = false;
@@ -11189,7 +11602,7 @@ static void dfmPublish(float fMHz, float pktRssi) {
              (unsigned long)(millis() / 1000), tstr, (unsigned long)dfmFrames, stOk ? sid : "????????", dfmSubtypeShort[dfs.subtype < 9 ? dfs.subtype : 1],
              fnr, pktRssi, fMHz, rxBw, lat, lon, alt, sondeVh * 3.6f, sondeDir, sondeVz, dp.sats, hl, ho, gf ? "GPS" : "fest", gps.sats,
              haveSondePos ? haversineKm(hl, ho, lat, lon) : 0.0, batV, batPct, batChg ? "+" : "");
-    logLine(ln);
+    logLineL(2, ln);
   }
 }
 
@@ -11248,7 +11661,7 @@ bool trackDfm(float fMHz) {
     if (filterOn && dfs.validID && strncmp(dfs.id, filterId, 8) != 0) {      // Sondenfilter: fremde Sonde
       char m[64];
       snprintf(m, sizeof(m), "Fremde Sonde %s bei %.3f MHz ignoriert (Filter %s)", dfs.id, fMHz, filterId);
-      logLine(m);
+      logLineL(1, m);
       foreignF = fMHz;
       foreignUntil = millis() + FILTER_FOREIGN_BLOCK_MS;
       dfmRadioMode(false);
